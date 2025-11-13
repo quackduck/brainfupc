@@ -46,28 +46,42 @@ module top (
       .clean(db_btn3)
   );
 
+  wire loaded;
+  wire [4:0] state_id;
+  wire [7:0] display_value;
+  wire executing;
+
+  // reg [21:0] slow_clk = 0;
+
+  // always @(posedge CLK) begin
+  //   slow_clk <= slow_clk + 1;
+  // end
+
   // edge detectors -> single-cycle pulses
   reg db_btn1_last = 0, db_btn2_last = 0, db_btn3_last = 0;
   wire btn1_pulse = db_btn1 & ~db_btn1_last;
   wire btn2_pulse = db_btn2 & ~db_btn2_last;
   wire btn3_pulse = db_btn3 & ~db_btn3_last;
+  // always @(posedge slow_clk[21]) begin
   always @(posedge CLK) begin
     db_btn1_last <= db_btn1;
     db_btn2_last <= db_btn2;
     db_btn3_last <= db_btn3;
   end
 
-  wire resetn = BTN_N;  // BTN_N active low, treat as active-high resetn
 
-  wire loaded;
-  wire [2:0] state_id;
-  wire [7:0] display_value;
-  wire executing;
+  // // sim:
+  // wire btn3_pulse = db_btn3;  // direct connection
+  // wire btn1_pulse = db_btn1;  // direct connection
+
+  wire resetn = BTN_N;  // BTN_N active low, treat as active-high resetn
 
   cpu_core core (
       .clk      (CLK),
+      // .clk      (slow_clk[21]),  // slow clock for visibility
       .resetn   (resetn),
       .start_req(btn1_pulse),
+      .step_req (btn2_pulse),
       .load_req (btn3_pulse),
       .loaded   (loaded),
       .executing(executing),
