@@ -51,19 +51,21 @@ module top (
   wire [7:0] display_value;
   wire executing;
 
-  // reg [21:0] slow_clk = 0;
+  reg [21:0] slow_clk = 0;
 
-  // always @(posedge CLK) begin
-  //   slow_clk <= slow_clk + 1;
-  // end
+  always @(posedge CLK) begin
+    slow_clk <= slow_clk + 1;
+  end
+
+  integer slowdown = 15;
 
   // edge detectors -> single-cycle pulses
   reg db_btn1_last = 0, db_btn2_last = 0, db_btn3_last = 0;
   wire btn1_pulse = db_btn1 & ~db_btn1_last;
   wire btn2_pulse = db_btn2 & ~db_btn2_last;
   wire btn3_pulse = db_btn3 & ~db_btn3_last;
-  // always @(posedge slow_clk[21]) begin
-  always @(posedge CLK) begin
+  always @(posedge slow_clk[slowdown]) begin
+    // always @(posedge CLK) begin
     db_btn1_last <= db_btn1;
     db_btn2_last <= db_btn2;
     db_btn3_last <= db_btn3;
@@ -77,8 +79,8 @@ module top (
   wire resetn = BTN_N;  // BTN_N active low, treat as active-high resetn
 
   cpu_core core (
-      .clk      (CLK),
-      // .clk      (slow_clk[21]),  // slow clock for visibility
+      // .clk      (CLK),
+      .clk      (slow_clk[slowdown]),  // slow clock for visibility
       .resetn   (resetn),
       .start_req(btn1_pulse),
       .step_req (btn2_pulse),

@@ -1,7 +1,7 @@
 `default_nettype none
 module cpu_core #(
     parameter PROG_ADDR_WIDTH = 10,
-    parameter PROG_LEN = 50
+    parameter PROG_LEN = 108
 ) (
     input  wire       clk,
     input  wire       resetn,
@@ -330,30 +330,145 @@ module cpu_core #(
           //   default: prog_wr <= 8'h00;
           // endcase
 
-          // program: multiply 4 and 7: >++++[<+++++++.>-]<.
+          // // program: multiply 4 and 7: >++++[<+++++++.>-]<.
+          // case (iptr)
+          //   0: prog_wr <= 8'h3E;  // >
+          //   1: prog_wr <= 8'h2B;  // +
+          //   2: prog_wr <= 8'h2B;  // +
+          //   3: prog_wr <= 8'h2B;  // +
+          //   4: prog_wr <= 8'h2B;  // +
+          //   5: prog_wr <= 8'h5B;  // [
+          //   6: prog_wr <= 8'h3C;  // <
+          //   7: prog_wr <= 8'h2B;  // +
+          //   8: prog_wr <= 8'h2B;  // +
+          //   9: prog_wr <= 8'h2B;  // +
+          //   10: prog_wr <= 8'h2B;  // +
+          //   11: prog_wr <= 8'h2B;  // +
+          //   12: prog_wr <= 8'h2B;  // +
+          //   13: prog_wr <= 8'h2B;  // +
+          //   14: prog_wr <= 8'h2E;  // .
+          //   15: prog_wr <= 8'h3E;  // >
+          //   16: prog_wr <= 8'h2D;  // -
+          //   17: prog_wr <= 8'h5D;  // ]
+          //   18: prog_wr <= 8'h3C;  // <
+          //   19: prog_wr <= 8'h2E;  // .
+          //   default: prog_wr <= 8'h00;
+          // endcase
+
+
+          // --- BEGIN AUTO-GENERATED CODE ---
+          // PROGRAM LENGTH (PROG_LEN) should be set to: 106
           case (iptr)
-            0: prog_wr <= 8'h3E;  // >
+            0: prog_wr <= 8'h2B;  // +
             1: prog_wr <= 8'h2B;  // +
             2: prog_wr <= 8'h2B;  // +
             3: prog_wr <= 8'h2B;  // +
             4: prog_wr <= 8'h2B;  // +
-            5: prog_wr <= 8'h5B;  // [
-            6: prog_wr <= 8'h3C;  // <
+            5: prog_wr <= 8'h2B;  // +
+            6: prog_wr <= 8'h2B;  // +
             7: prog_wr <= 8'h2B;  // +
-            8: prog_wr <= 8'h2B;  // +
-            9: prog_wr <= 8'h2B;  // +
+            8: prog_wr <= 8'h5B;  // [
+            9: prog_wr <= 8'h3E;  // >
             10: prog_wr <= 8'h2B;  // +
             11: prog_wr <= 8'h2B;  // +
             12: prog_wr <= 8'h2B;  // +
             13: prog_wr <= 8'h2B;  // +
-            14: prog_wr <= 8'h2E;  // .
+            14: prog_wr <= 8'h5B;  // [
             15: prog_wr <= 8'h3E;  // >
-            16: prog_wr <= 8'h2D;  // -
-            17: prog_wr <= 8'h5D;  // ]
-            18: prog_wr <= 8'h3C;  // <
-            19: prog_wr <= 8'h2E;  // .
-            default: prog_wr <= 8'h00;
+            16: prog_wr <= 8'h2B;  // +
+            17: prog_wr <= 8'h2B;  // +
+            18: prog_wr <= 8'h3E;  // >
+            19: prog_wr <= 8'h2B;  // +
+            20: prog_wr <= 8'h2B;  // +
+            21: prog_wr <= 8'h2B;  // +
+            22: prog_wr <= 8'h3E;  // >
+            23: prog_wr <= 8'h2B;  // +
+            24: prog_wr <= 8'h2B;  // +
+            25: prog_wr <= 8'h2B;  // +
+            26: prog_wr <= 8'h3E;  // >
+            27: prog_wr <= 8'h2B;  // +
+            28: prog_wr <= 8'h3C;  // <
+            29: prog_wr <= 8'h3C;  // <
+            30: prog_wr <= 8'h3C;  // <
+            31: prog_wr <= 8'h3C;  // <
+            32: prog_wr <= 8'h2D;  // -
+            33: prog_wr <= 8'h5D;  // ]
+            34: prog_wr <= 8'h3E;  // >
+            35: prog_wr <= 8'h2B;  // +
+            36: prog_wr <= 8'h3E;  // >
+            37: prog_wr <= 8'h2B;  // +
+            38: prog_wr <= 8'h3E;  // >
+            39: prog_wr <= 8'h2D;  // -
+            40: prog_wr <= 8'h3E;  // >
+            41: prog_wr <= 8'h3E;  // >
+            42: prog_wr <= 8'h2B;  // +
+            43: prog_wr <= 8'h5B;  // [
+            44: prog_wr <= 8'h3C;  // <
+            45: prog_wr <= 8'h5D;  // ]
+            46: prog_wr <= 8'h3C;  // <
+            47: prog_wr <= 8'h2D;  // -
+            48: prog_wr <= 8'h5D;  // ]
+            49: prog_wr <= 8'h3E;  // >
+            50: prog_wr <= 8'h3E;  // >
+            51: prog_wr <= 8'h2E;  // .
+            52: prog_wr <= 8'h3E;  // >
+            53: prog_wr <= 8'h2D;  // -
+            54: prog_wr <= 8'h2D;  // -
+            55: prog_wr <= 8'h2D;  // -
+            56: prog_wr <= 8'h2E;  // .
+            57: prog_wr <= 8'h2B;  // +
+            58: prog_wr <= 8'h2B;  // +
+            59: prog_wr <= 8'h2B;  // +
+            60: prog_wr <= 8'h2B;  // +
+            61: prog_wr <= 8'h2B;  // +
+            62: prog_wr <= 8'h2B;  // +
+            63: prog_wr <= 8'h2B;  // +
+            64: prog_wr <= 8'h2E;  // .
+            65: prog_wr <= 8'h2E;  // .
+            66: prog_wr <= 8'h2B;  // +
+            67: prog_wr <= 8'h2B;  // +
+            68: prog_wr <= 8'h2B;  // +
+            69: prog_wr <= 8'h2E;  // .
+            70: prog_wr <= 8'h3E;  // >
+            71: prog_wr <= 8'h3E;  // >
+            72: prog_wr <= 8'h2E;  // .
+            73: prog_wr <= 8'h3C;  // <
+            74: prog_wr <= 8'h2D;  // -
+            75: prog_wr <= 8'h2E;  // .
+            76: prog_wr <= 8'h3C;  // <
+            77: prog_wr <= 8'h2E;  // .
+            78: prog_wr <= 8'h2B;  // +
+            79: prog_wr <= 8'h2B;  // +
+            80: prog_wr <= 8'h2B;  // +
+            81: prog_wr <= 8'h2E;  // .
+            82: prog_wr <= 8'h2D;  // -
+            83: prog_wr <= 8'h2D;  // -
+            84: prog_wr <= 8'h2D;  // -
+            85: prog_wr <= 8'h2D;  // -
+            86: prog_wr <= 8'h2D;  // -
+            87: prog_wr <= 8'h2D;  // -
+            88: prog_wr <= 8'h2E;  // .
+            89: prog_wr <= 8'h2D;  // -
+            90: prog_wr <= 8'h2D;  // -
+            91: prog_wr <= 8'h2D;  // -
+            92: prog_wr <= 8'h2D;  // -
+            93: prog_wr <= 8'h2D;  // -
+            94: prog_wr <= 8'h2D;  // -
+            95: prog_wr <= 8'h2D;  // -
+            96: prog_wr <= 8'h2D;  // -
+            97: prog_wr <= 8'h2E;  // .
+            98: prog_wr <= 8'h3E;  // >
+            99: prog_wr <= 8'h3E;  // >
+            100: prog_wr <= 8'h2B;  // +
+            101: prog_wr <= 8'h2E;  // .
+            102: prog_wr <= 8'h3E;  // >
+            103: prog_wr <= 8'h2B;  // +
+            104: prog_wr <= 8'h2B;  // +
+            105: prog_wr <= 8'h2E;  // .
+            default: prog_wr <= 8'h00;  // NOP
           endcase
+          // --- END AUTO-GENERATED CODE ---
+
 
           if (iptr == PROG_LEN) begin
             iptr <= {PROG_ADDR_WIDTH{1'b0}};
@@ -595,9 +710,9 @@ module cpu_core #(
         end
 
         S_STEP_WAIT: begin
-          if (step_req) begin
-            state_id <= S_FETCH_ADDR;
-          end
+          // if (step_req) begin
+          state_id <= S_FETCH_ADDR;
+          // end
         end
 
         default: begin
