@@ -1,0 +1,11 @@
+{
+    "makefile.configureOnOpen": true,
+    "editor.formatOnSave": true,
+    "verilog.linting.linter": "verilator",
+    // "verilog.languageServer.veribleVerilogLs.enabled": true,
+    "verilog.formatting.verilogHDL.formatter": "verible-verilog-format",
+    "verilog.ctags.path": "/usr/bin/ctags",
+    "python.formatting.provider": "yapf",
+    "python.linting.flake8Enabled": true,
+    "python.linting.enabled": true,
+}
