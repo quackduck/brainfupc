@@ -1,17 +1,18 @@
 `default_nettype none
 module cpu_core #(
-    parameter PROG_ADDR_WIDTH = 10,
-    parameter PROG_LEN = 108
+    parameter PROG_ADDR_WIDTH = 11,
+    parameter PROG_LEN = 2047
 ) (
-    input  wire       clk,
-    input  wire       resetn,
-    input  wire       start_req,
-    input  wire       step_req,
-    input  wire       load_req,
-    output reg        loaded,
-    output reg        executing,
-    output reg  [4:0] state_id,
-    output reg  [7:0] display
+    input  wire        clk,
+    input  wire [21:0] time_reg,
+    input  wire        resetn,
+    input  wire        start_req,
+    input  wire        step_req,
+    input  wire        load_req,
+    output reg         loaded,
+    output reg         executing,
+    output reg  [ 4:0] state_id,
+    output reg  [ 7:0] display
 );
 
   // -------------------------------------------------------------------------
@@ -101,14 +102,14 @@ module cpu_core #(
   // -------------------------------------------------------------------------
   // Bracket stack (push addresses of '[')
   // -------------------------------------------------------------------------
-  reg  [PROG_ADDR_WIDTH-1:0] stack_addr_reg;
+  reg  [PROG_ADDR_WIDTH-2:0] stack_addr_reg;  // at most half the program is [
   reg  [PROG_ADDR_WIDTH-1:0] stack_wr;
   reg                        stack_we;
   wire [PROG_ADDR_WIDTH-1:0] stack_rd;
-  reg  [PROG_ADDR_WIDTH-1:0] stack_ptr;
+  reg  [PROG_ADDR_WIDTH-2:0] stack_ptr;
 
   bram_sp #(
-      .ADDR_WIDTH(PROG_ADDR_WIDTH),
+      .ADDR_WIDTH(PROG_ADDR_WIDTH - 1),
       .DATA_WIDTH(PROG_ADDR_WIDTH)
   ) bracket_stack (
       .clk(clk),
@@ -180,8 +181,8 @@ module cpu_core #(
       current_cell      <= 8'h00;
       current_cell_next <= 8'h00;
 
-      stack_ptr         <= {PROG_ADDR_WIDTH{1'b0}};
-      stack_addr_reg    <= {PROG_ADDR_WIDTH{1'b0}};
+      stack_ptr         <= {PROG_ADDR_WIDTH - 1{1'b0}};
+      stack_addr_reg    <= {PROG_ADDR_WIDTH - 1{1'b0}};
       stack_wr          <= {PROG_ADDR_WIDTH{1'b0}};
       popped_addr       <= {PROG_ADDR_WIDTH{1'b0}};
 
@@ -225,7 +226,7 @@ module cpu_core #(
             current_cell <= 8'h00;
 
             // preprocessing state init
-            stack_ptr <= {PROG_ADDR_WIDTH{1'b0}};
+            stack_ptr <= {PROG_ADDR_WIDTH - 1{1'b0}};
             jump_addr_reg <= {PROG_ADDR_WIDTH{1'b0}};
             popped_addr <= {PROG_ADDR_WIDTH{1'b0}};
 
@@ -253,42 +254,6 @@ module cpu_core #(
         S_LOAD: begin
           prog_we <= 1'b1;
           prog_addr_reg <= iptr;
-
-          // // program: +++.>++.<.>.>.
-          // case (iptr)
-          //   0: prog_wr <= 8'h2B;  // +
-          //   1: prog_wr <= 8'h2B;  // +
-          //   2: prog_wr <= 8'h2B;  // +
-          //   3: prog_wr <= 8'h2E;  // .
-          //   4: prog_wr <= 8'h3E;  // >
-          //   5: prog_wr <= 8'h2B;  // +
-          //   6: prog_wr <= 8'h2B;  // +
-          //   7: prog_wr <= 8'h2E;  // .
-          //   8: prog_wr <= 8'h3C;  // <
-          //   9: prog_wr <= 8'h2E;  // .
-          //   10: prog_wr <= 8'h3E;  // >
-          //   11: prog_wr <= 8'h2E;  // .
-          //   12: prog_wr <= 8'h3E;  // >
-          //   13: prog_wr <= 8'h2E;  // .
-          //   default: prog_wr <= 8'h00;
-          // endcase
-
-          // // program: +++.>++.<.>.
-          // case (iptr)
-          //   0: prog_wr <= 8'h2B;  // +
-          //   1: prog_wr <= 8'h2B;  // +
-          //   2: prog_wr <= 8'h2B;  // +
-          //   3: prog_wr <= 8'h2E;  // .
-          //   4: prog_wr <= 8'h3E;  // >
-          //   5: prog_wr <= 8'h2B;  // +
-          //   6: prog_wr <= 8'h2B;  // +
-          //   7: prog_wr <= 8'h2E;  // .
-          //   8: prog_wr <= 8'h3C;  // <
-          //   9: prog_wr <= 8'h2E;  // .
-          //   10: prog_wr <= 8'h3E;  // >
-          //   11: prog_wr <= 8'h2E;  // .
-          //   default: prog_wr <= 8'h00;
-          // endcase
 
           // // program: +[+.]
           // case (iptr)
@@ -356,8 +321,343 @@ module cpu_core #(
           // endcase
 
 
-          // --- BEGIN AUTO-GENERATED CODE ---
-          // PROGRAM LENGTH (PROG_LEN) should be set to: 106
+          // // --- BEGIN AUTO-GENERATED CODE --- // hello world
+          // // PROGRAM LENGTH (PROG_LEN) should be set to: 106
+          // case (iptr)
+          //   0: prog_wr <= 8'h2B;  // +
+          //   1: prog_wr <= 8'h2B;  // +
+          //   2: prog_wr <= 8'h2B;  // +
+          //   3: prog_wr <= 8'h2B;  // +
+          //   4: prog_wr <= 8'h2B;  // +
+          //   5: prog_wr <= 8'h2B;  // +
+          //   6: prog_wr <= 8'h2B;  // +
+          //   7: prog_wr <= 8'h2B;  // +
+          //   8: prog_wr <= 8'h5B;  // [
+          //   9: prog_wr <= 8'h3E;  // >
+          //   10: prog_wr <= 8'h2B;  // +
+          //   11: prog_wr <= 8'h2B;  // +
+          //   12: prog_wr <= 8'h2B;  // +
+          //   13: prog_wr <= 8'h2B;  // +
+          //   14: prog_wr <= 8'h5B;  // [
+          //   15: prog_wr <= 8'h3E;  // >
+          //   16: prog_wr <= 8'h2B;  // +
+          //   17: prog_wr <= 8'h2B;  // +
+          //   18: prog_wr <= 8'h3E;  // >
+          //   19: prog_wr <= 8'h2B;  // +
+          //   20: prog_wr <= 8'h2B;  // +
+          //   21: prog_wr <= 8'h2B;  // +
+          //   22: prog_wr <= 8'h3E;  // >
+          //   23: prog_wr <= 8'h2B;  // +
+          //   24: prog_wr <= 8'h2B;  // +
+          //   25: prog_wr <= 8'h2B;  // +
+          //   26: prog_wr <= 8'h3E;  // >
+          //   27: prog_wr <= 8'h2B;  // +
+          //   28: prog_wr <= 8'h3C;  // <
+          //   29: prog_wr <= 8'h3C;  // <
+          //   30: prog_wr <= 8'h3C;  // <
+          //   31: prog_wr <= 8'h3C;  // <
+          //   32: prog_wr <= 8'h2D;  // -
+          //   33: prog_wr <= 8'h5D;  // ]
+          //   34: prog_wr <= 8'h3E;  // >
+          //   35: prog_wr <= 8'h2B;  // +
+          //   36: prog_wr <= 8'h3E;  // >
+          //   37: prog_wr <= 8'h2B;  // +
+          //   38: prog_wr <= 8'h3E;  // >
+          //   39: prog_wr <= 8'h2D;  // -
+          //   40: prog_wr <= 8'h3E;  // >
+          //   41: prog_wr <= 8'h3E;  // >
+          //   42: prog_wr <= 8'h2B;  // +
+          //   43: prog_wr <= 8'h5B;  // [
+          //   44: prog_wr <= 8'h3C;  // <
+          //   45: prog_wr <= 8'h5D;  // ]
+          //   46: prog_wr <= 8'h3C;  // <
+          //   47: prog_wr <= 8'h2D;  // -
+          //   48: prog_wr <= 8'h5D;  // ]
+          //   49: prog_wr <= 8'h3E;  // >
+          //   50: prog_wr <= 8'h3E;  // >
+          //   51: prog_wr <= 8'h2E;  // .
+          //   52: prog_wr <= 8'h3E;  // >
+          //   53: prog_wr <= 8'h2D;  // -
+          //   54: prog_wr <= 8'h2D;  // -
+          //   55: prog_wr <= 8'h2D;  // -
+          //   56: prog_wr <= 8'h2E;  // .
+          //   57: prog_wr <= 8'h2B;  // +
+          //   58: prog_wr <= 8'h2B;  // +
+          //   59: prog_wr <= 8'h2B;  // +
+          //   60: prog_wr <= 8'h2B;  // +
+          //   61: prog_wr <= 8'h2B;  // +
+          //   62: prog_wr <= 8'h2B;  // +
+          //   63: prog_wr <= 8'h2B;  // +
+          //   64: prog_wr <= 8'h2E;  // .
+          //   65: prog_wr <= 8'h2E;  // .
+          //   66: prog_wr <= 8'h2B;  // +
+          //   67: prog_wr <= 8'h2B;  // +
+          //   68: prog_wr <= 8'h2B;  // +
+          //   69: prog_wr <= 8'h2E;  // .
+          //   70: prog_wr <= 8'h3E;  // >
+          //   71: prog_wr <= 8'h3E;  // >
+          //   72: prog_wr <= 8'h2E;  // .
+          //   73: prog_wr <= 8'h3C;  // <
+          //   74: prog_wr <= 8'h2D;  // -
+          //   75: prog_wr <= 8'h2E;  // .
+          //   76: prog_wr <= 8'h3C;  // <
+          //   77: prog_wr <= 8'h2E;  // .
+          //   78: prog_wr <= 8'h2B;  // +
+          //   79: prog_wr <= 8'h2B;  // +
+          //   80: prog_wr <= 8'h2B;  // +
+          //   81: prog_wr <= 8'h2E;  // .
+          //   82: prog_wr <= 8'h2D;  // -
+          //   83: prog_wr <= 8'h2D;  // -
+          //   84: prog_wr <= 8'h2D;  // -
+          //   85: prog_wr <= 8'h2D;  // -
+          //   86: prog_wr <= 8'h2D;  // -
+          //   87: prog_wr <= 8'h2D;  // -
+          //   88: prog_wr <= 8'h2E;  // .
+          //   89: prog_wr <= 8'h2D;  // -
+          //   90: prog_wr <= 8'h2D;  // -
+          //   91: prog_wr <= 8'h2D;  // -
+          //   92: prog_wr <= 8'h2D;  // -
+          //   93: prog_wr <= 8'h2D;  // -
+          //   94: prog_wr <= 8'h2D;  // -
+          //   95: prog_wr <= 8'h2D;  // -
+          //   96: prog_wr <= 8'h2D;  // -
+          //   97: prog_wr <= 8'h2E;  // .
+          //   98: prog_wr <= 8'h3E;  // >
+          //   99: prog_wr <= 8'h3E;  // >
+          //   100: prog_wr <= 8'h2B;  // +
+          //   101: prog_wr <= 8'h2E;  // .
+          //   102: prog_wr <= 8'h3E;  // >
+          //   103: prog_wr <= 8'h2B;  // +
+          //   104: prog_wr <= 8'h2B;  // +
+          //   105: prog_wr <= 8'h2E;  // .
+          //   default: prog_wr <= 8'h00;  // NOP
+          // endcase
+          // // --- END AUTO-GENERATED CODE ---
+
+
+
+          // // --- BEGIN AUTO-GENERATED CODE --- // amber program
+          // // PROGRAM LENGTH (PROG_LEN) should be set to: 212
+          // case (iptr)
+          //   0: prog_wr <= 8'h2D;  // -
+          //   1: prog_wr <= 8'h2D;  // -
+          //   2: prog_wr <= 8'h2D;  // -
+          //   3: prog_wr <= 8'h2D;  // -
+          //   4: prog_wr <= 8'h5B;  // [
+          //   5: prog_wr <= 8'h2D;  // -
+          //   6: prog_wr <= 8'h2D;  // -
+          //   7: prog_wr <= 8'h2D;  // -
+          //   8: prog_wr <= 8'h2D;  // -
+          //   9: prog_wr <= 8'h3E;  // >
+          //   10: prog_wr <= 8'h2B;  // +
+          //   11: prog_wr <= 8'h3C;  // <
+          //   12: prog_wr <= 8'h5D;  // ]
+          //   13: prog_wr <= 8'h3E;  // >
+          //   14: prog_wr <= 8'h2B;  // +
+          //   15: prog_wr <= 8'h2B;  // +
+          //   16: prog_wr <= 8'h2E;  // .
+          //   17: prog_wr <= 8'h5B;  // [
+          //   18: prog_wr <= 8'h2D;  // -
+          //   19: prog_wr <= 8'h2D;  // -
+          //   20: prog_wr <= 8'h2D;  // -
+          //   21: prog_wr <= 8'h3E;  // >
+          //   22: prog_wr <= 8'h2B;  // +
+          //   23: prog_wr <= 8'h3C;  // <
+          //   24: prog_wr <= 8'h5D;  // ]
+          //   25: prog_wr <= 8'h3E;  // >
+          //   26: prog_wr <= 8'h2B;  // +
+          //   27: prog_wr <= 8'h2B;  // +
+          //   28: prog_wr <= 8'h2E;  // .
+          //   29: prog_wr <= 8'h2D;  // -
+          //   30: prog_wr <= 8'h2D;  // -
+          //   31: prog_wr <= 8'h2D;  // -
+          //   32: prog_wr <= 8'h2D;  // -
+          //   33: prog_wr <= 8'h2D;  // -
+          //   34: prog_wr <= 8'h2D;  // -
+          //   35: prog_wr <= 8'h2D;  // -
+          //   36: prog_wr <= 8'h2D;  // -
+          //   37: prog_wr <= 8'h2D;  // -
+          //   38: prog_wr <= 8'h2D;  // -
+          //   39: prog_wr <= 8'h2D;  // -
+          //   40: prog_wr <= 8'h2E;  // .
+          //   41: prog_wr <= 8'h2B;  // +
+          //   42: prog_wr <= 8'h2B;  // +
+          //   43: prog_wr <= 8'h2B;  // +
+          //   44: prog_wr <= 8'h2E;  // .
+          //   45: prog_wr <= 8'h2B;  // +
+          //   46: prog_wr <= 8'h2B;  // +
+          //   47: prog_wr <= 8'h2B;  // +
+          //   48: prog_wr <= 8'h2B;  // +
+          //   49: prog_wr <= 8'h2B;  // +
+          //   50: prog_wr <= 8'h2B;  // +
+          //   51: prog_wr <= 8'h2B;  // +
+          //   52: prog_wr <= 8'h2B;  // +
+          //   53: prog_wr <= 8'h2B;  // +
+          //   54: prog_wr <= 8'h2B;  // +
+          //   55: prog_wr <= 8'h2B;  // +
+          //   56: prog_wr <= 8'h2B;  // +
+          //   57: prog_wr <= 8'h2B;  // +
+          //   58: prog_wr <= 8'h2E;  // .
+          //   59: prog_wr <= 8'h5B;  // [
+          //   60: prog_wr <= 8'h2D;  // -
+          //   61: prog_wr <= 8'h2D;  // -
+          //   62: prog_wr <= 8'h3E;  // >
+          //   63: prog_wr <= 8'h2B;  // +
+          //   64: prog_wr <= 8'h2B;  // +
+          //   65: prog_wr <= 8'h2B;  // +
+          //   66: prog_wr <= 8'h2B;  // +
+          //   67: prog_wr <= 8'h2B;  // +
+          //   68: prog_wr <= 8'h3C;  // <
+          //   69: prog_wr <= 8'h5D;  // ]
+          //   70: prog_wr <= 8'h3E;  // >
+          //   71: prog_wr <= 8'h2B;  // +
+          //   72: prog_wr <= 8'h2B;  // +
+          //   73: prog_wr <= 8'h2B;  // +
+          //   74: prog_wr <= 8'h2E;  // .
+          //   75: prog_wr <= 8'h2D;  // -
+          //   76: prog_wr <= 8'h5B;  // [
+          //   77: prog_wr <= 8'h2D;  // -
+          //   78: prog_wr <= 8'h2D;  // -
+          //   79: prog_wr <= 8'h2D;  // -
+          //   80: prog_wr <= 8'h3E;  // >
+          //   81: prog_wr <= 8'h2B;  // +
+          //   82: prog_wr <= 8'h2B;  // +
+          //   83: prog_wr <= 8'h3C;  // <
+          //   84: prog_wr <= 8'h5D;  // ]
+          //   85: prog_wr <= 8'h3E;  // >
+          //   86: prog_wr <= 8'h2D;  // -
+          //   87: prog_wr <= 8'h2E;  // .
+          //   88: prog_wr <= 8'h2B;  // +
+          //   89: prog_wr <= 8'h2B;  // +
+          //   90: prog_wr <= 8'h2B;  // +
+          //   91: prog_wr <= 8'h2B;  // +
+          //   92: prog_wr <= 8'h2B;  // +
+          //   93: prog_wr <= 8'h2B;  // +
+          //   94: prog_wr <= 8'h2B;  // +
+          //   95: prog_wr <= 8'h2B;  // +
+          //   96: prog_wr <= 8'h2B;  // +
+          //   97: prog_wr <= 8'h2B;  // +
+          //   98: prog_wr <= 8'h2E;  // .
+          //   99: prog_wr <= 8'h2B;  // +
+          //   100: prog_wr <= 8'h5B;  // [
+          //   101: prog_wr <= 8'h2D;  // -
+          //   102: prog_wr <= 8'h2D;  // -
+          //   103: prog_wr <= 8'h2D;  // -
+          //   104: prog_wr <= 8'h2D;  // -
+          //   105: prog_wr <= 8'h3E;  // >
+          //   106: prog_wr <= 8'h2B;  // +
+          //   107: prog_wr <= 8'h3C;  // <
+          //   108: prog_wr <= 8'h5D;  // ]
+          //   109: prog_wr <= 8'h3E;  // >
+          //   110: prog_wr <= 8'h2B;  // +
+          //   111: prog_wr <= 8'h2B;  // +
+          //   112: prog_wr <= 8'h2B;  // +
+          //   113: prog_wr <= 8'h2E;  // .
+          //   114: prog_wr <= 8'h2D;  // -
+          //   115: prog_wr <= 8'h2D;  // -
+          //   116: prog_wr <= 8'h2D;  // -
+          //   117: prog_wr <= 8'h5B;  // [
+          //   118: prog_wr <= 8'h2D;  // -
+          //   119: prog_wr <= 8'h3E;  // >
+          //   120: prog_wr <= 8'h2B;  // +
+          //   121: prog_wr <= 8'h2B;  // +
+          //   122: prog_wr <= 8'h2B;  // +
+          //   123: prog_wr <= 8'h2B;  // +
+          //   124: prog_wr <= 8'h3C;  // <
+          //   125: prog_wr <= 8'h5D;  // ]
+          //   126: prog_wr <= 8'h3E;  // >
+          //   127: prog_wr <= 8'h2D;  // -
+          //   128: prog_wr <= 8'h2E;  // .
+          //   129: prog_wr <= 8'h2D;  // -
+          //   130: prog_wr <= 8'h2D;  // -
+          //   131: prog_wr <= 8'h2D;  // -
+          //   132: prog_wr <= 8'h2D;  // -
+          //   133: prog_wr <= 8'h2E;  // .
+          //   134: prog_wr <= 8'h5B;  // [
+          //   135: prog_wr <= 8'h2D;  // -
+          //   136: prog_wr <= 8'h2D;  // -
+          //   137: prog_wr <= 8'h2D;  // -
+          //   138: prog_wr <= 8'h3E;  // >
+          //   139: prog_wr <= 8'h2B;  // +
+          //   140: prog_wr <= 8'h3C;  // <
+          //   141: prog_wr <= 8'h5D;  // ]
+          //   142: prog_wr <= 8'h3E;  // >
+          //   143: prog_wr <= 8'h2D;  // -
+          //   144: prog_wr <= 8'h2D;  // -
+          //   145: prog_wr <= 8'h2D;  // -
+          //   146: prog_wr <= 8'h2D;  // -
+          //   147: prog_wr <= 8'h2D;  // -
+          //   148: prog_wr <= 8'h2E;  // .
+          //   149: prog_wr <= 8'h2B;  // +
+          //   150: prog_wr <= 8'h5B;  // [
+          //   151: prog_wr <= 8'h2D;  // -
+          //   152: prog_wr <= 8'h3E;  // >
+          //   153: prog_wr <= 8'h2B;  // +
+          //   154: prog_wr <= 8'h2B;  // +
+          //   155: prog_wr <= 8'h2B;  // +
+          //   156: prog_wr <= 8'h3C;  // <
+          //   157: prog_wr <= 8'h5D;  // ]
+          //   158: prog_wr <= 8'h3E;  // >
+          //   159: prog_wr <= 8'h2E;  // .
+          //   160: prog_wr <= 8'h2B;  // +
+          //   161: prog_wr <= 8'h2B;  // +
+          //   162: prog_wr <= 8'h2B;  // +
+          //   163: prog_wr <= 8'h2B;  // +
+          //   164: prog_wr <= 8'h2B;  // +
+          //   165: prog_wr <= 8'h2B;  // +
+          //   166: prog_wr <= 8'h2B;  // +
+          //   167: prog_wr <= 8'h2B;  // +
+          //   168: prog_wr <= 8'h2B;  // +
+          //   169: prog_wr <= 8'h2B;  // +
+          //   170: prog_wr <= 8'h2B;  // +
+          //   171: prog_wr <= 8'h2B;  // +
+          //   172: prog_wr <= 8'h2E;  // .
+          //   173: prog_wr <= 8'h2E;  // .
+          //   174: prog_wr <= 8'h2D;  // -
+          //   175: prog_wr <= 8'h2D;  // -
+          //   176: prog_wr <= 8'h2D;  // -
+          //   177: prog_wr <= 8'h2E;  // .
+          //   178: prog_wr <= 8'h5B;  // [
+          //   179: prog_wr <= 8'h2B;  // +
+          //   180: prog_wr <= 8'h2B;  // +
+          //   181: prog_wr <= 8'h3E;  // >
+          //   182: prog_wr <= 8'h2D;  // -
+          //   183: prog_wr <= 8'h2D;  // -
+          //   184: prog_wr <= 8'h2D;  // -
+          //   185: prog_wr <= 8'h3C;  // <
+          //   186: prog_wr <= 8'h5D;  // ]
+          //   187: prog_wr <= 8'h3E;  // >
+          //   188: prog_wr <= 8'h2D;  // -
+          //   189: prog_wr <= 8'h2D;  // -
+          //   190: prog_wr <= 8'h2E;  // .
+          //   191: prog_wr <= 8'h2D;  // -
+          //   192: prog_wr <= 8'h2D;  // -
+          //   193: prog_wr <= 8'h5B;  // [
+          //   194: prog_wr <= 8'h2D;  // -
+          //   195: prog_wr <= 8'h3E;  // >
+          //   196: prog_wr <= 8'h2B;  // +
+          //   197: prog_wr <= 8'h2B;  // +
+          //   198: prog_wr <= 8'h3C;  // <
+          //   199: prog_wr <= 8'h5D;  // ]
+          //   200: prog_wr <= 8'h3E;  // >
+          //   201: prog_wr <= 8'h2E;  // .
+          //   202: prog_wr <= 8'h2D;  // -
+          //   203: prog_wr <= 8'h2D;  // -
+          //   204: prog_wr <= 8'h2D;  // -
+          //   205: prog_wr <= 8'h2D;  // -
+          //   206: prog_wr <= 8'h2D;  // -
+          //   207: prog_wr <= 8'h2D;  // -
+          //   208: prog_wr <= 8'h2D;  // -
+          //   209: prog_wr <= 8'h2D;  // -
+          //   210: prog_wr <= 8'h2D;  // -
+          //   211: prog_wr <= 8'h2E;  // .
+          //   default: prog_wr <= 8'h00;  // NOP
+          // endcase
+          // // --- END AUTO-GENERATED CODE ---
+
+
+          // --- BEGIN AUTO-GENERATED CODE --- // stress test: https://github.com/rdebath/Brainfuck/blob/master/testing/Bench.b
+          // PROGRAM LENGTH (PROG_LEN) should be set to: 74. runs about 16*256^3 instructions.
           case (iptr)
             0: prog_wr <= 8'h2B;  // +
             1: prog_wr <= 8'h2B;  // +
@@ -368,106 +668,187 @@ module cpu_core #(
             6: prog_wr <= 8'h2B;  // +
             7: prog_wr <= 8'h2B;  // +
             8: prog_wr <= 8'h5B;  // [
-            9: prog_wr <= 8'h3E;  // >
-            10: prog_wr <= 8'h2B;  // +
-            11: prog_wr <= 8'h2B;  // +
-            12: prog_wr <= 8'h2B;  // +
-            13: prog_wr <= 8'h2B;  // +
-            14: prog_wr <= 8'h5B;  // [
-            15: prog_wr <= 8'h3E;  // >
-            16: prog_wr <= 8'h2B;  // +
-            17: prog_wr <= 8'h2B;  // +
+            9: prog_wr <= 8'h2D;  // -
+            10: prog_wr <= 8'h3E;  // >
+            11: prog_wr <= 8'h2D;  // -
+            12: prog_wr <= 8'h5B;  // [
+            13: prog_wr <= 8'h2D;  // -
+            14: prog_wr <= 8'h3E;  // >
+            15: prog_wr <= 8'h2D;  // -
+            16: prog_wr <= 8'h5B;  // [
+            17: prog_wr <= 8'h2D;  // -
             18: prog_wr <= 8'h3E;  // >
-            19: prog_wr <= 8'h2B;  // +
-            20: prog_wr <= 8'h2B;  // +
-            21: prog_wr <= 8'h2B;  // +
-            22: prog_wr <= 8'h3E;  // >
-            23: prog_wr <= 8'h2B;  // +
-            24: prog_wr <= 8'h2B;  // +
-            25: prog_wr <= 8'h2B;  // +
-            26: prog_wr <= 8'h3E;  // >
-            27: prog_wr <= 8'h2B;  // +
-            28: prog_wr <= 8'h3C;  // <
-            29: prog_wr <= 8'h3C;  // <
-            30: prog_wr <= 8'h3C;  // <
-            31: prog_wr <= 8'h3C;  // <
-            32: prog_wr <= 8'h2D;  // -
-            33: prog_wr <= 8'h5D;  // ]
-            34: prog_wr <= 8'h3E;  // >
+            19: prog_wr <= 8'h2D;  // -
+            20: prog_wr <= 8'h5B;  // [
+            21: prog_wr <= 8'h2D;  // -
+            22: prog_wr <= 8'h5D;  // ]
+            23: prog_wr <= 8'h3C;  // <
+            24: prog_wr <= 8'h5D;  // ]
+            25: prog_wr <= 8'h3C;  // <
+            26: prog_wr <= 8'h5D;  // ]
+            27: prog_wr <= 8'h3C;  // <
+            28: prog_wr <= 8'h5D;  // ]
+            29: prog_wr <= 8'h3E;  // >
+            30: prog_wr <= 8'h2B;  // +
+            31: prog_wr <= 8'h2B;  // +
+            32: prog_wr <= 8'h2B;  // +
+            33: prog_wr <= 8'h2B;  // +
+            34: prog_wr <= 8'h2B;  // +
             35: prog_wr <= 8'h2B;  // +
-            36: prog_wr <= 8'h3E;  // >
+            36: prog_wr <= 8'h2B;  // +
             37: prog_wr <= 8'h2B;  // +
-            38: prog_wr <= 8'h3E;  // >
-            39: prog_wr <= 8'h2D;  // -
-            40: prog_wr <= 8'h3E;  // >
-            41: prog_wr <= 8'h3E;  // >
+            38: prog_wr <= 8'h5B;  // [
+            39: prog_wr <= 8'h3C;  // <
+            40: prog_wr <= 8'h2B;  // +
+            41: prog_wr <= 8'h2B;  // +
             42: prog_wr <= 8'h2B;  // +
-            43: prog_wr <= 8'h5B;  // [
-            44: prog_wr <= 8'h3C;  // <
-            45: prog_wr <= 8'h5D;  // ]
-            46: prog_wr <= 8'h3C;  // <
-            47: prog_wr <= 8'h2D;  // -
-            48: prog_wr <= 8'h5D;  // ]
-            49: prog_wr <= 8'h3E;  // >
+            43: prog_wr <= 8'h2B;  // +
+            44: prog_wr <= 8'h2B;  // +
+            45: prog_wr <= 8'h2B;  // +
+            46: prog_wr <= 8'h2B;  // +
+            47: prog_wr <= 8'h2B;  // +
+            48: prog_wr <= 8'h2B;  // +
+            49: prog_wr <= 8'h2B;  // +
             50: prog_wr <= 8'h3E;  // >
-            51: prog_wr <= 8'h2E;  // .
-            52: prog_wr <= 8'h3E;  // >
-            53: prog_wr <= 8'h2D;  // -
-            54: prog_wr <= 8'h2D;  // -
-            55: prog_wr <= 8'h2D;  // -
-            56: prog_wr <= 8'h2E;  // .
-            57: prog_wr <= 8'h2B;  // +
+            51: prog_wr <= 8'h2D;  // -
+            52: prog_wr <= 8'h5D;  // ]
+            53: prog_wr <= 8'h3C;  // <
+            54: prog_wr <= 8'h5B;  // [
+            55: prog_wr <= 8'h3E;  // >
+            56: prog_wr <= 8'h2B;  // +
+            57: prog_wr <= 8'h3E;  // >
             58: prog_wr <= 8'h2B;  // +
-            59: prog_wr <= 8'h2B;  // +
-            60: prog_wr <= 8'h2B;  // +
-            61: prog_wr <= 8'h2B;  // +
-            62: prog_wr <= 8'h2B;  // +
-            63: prog_wr <= 8'h2B;  // +
-            64: prog_wr <= 8'h2E;  // .
+            59: prog_wr <= 8'h3C;  // <
+            60: prog_wr <= 8'h3C;  // <
+            61: prog_wr <= 8'h2D;  // -
+            62: prog_wr <= 8'h5D;  // ]
+            63: prog_wr <= 8'h3E;  // >
+            64: prog_wr <= 8'h2D;  // -
             65: prog_wr <= 8'h2E;  // .
-            66: prog_wr <= 8'h2B;  // +
-            67: prog_wr <= 8'h2B;  // +
-            68: prog_wr <= 8'h2B;  // +
-            69: prog_wr <= 8'h2E;  // .
-            70: prog_wr <= 8'h3E;  // >
-            71: prog_wr <= 8'h3E;  // >
+            66: prog_wr <= 8'h3E;  // >
+            67: prog_wr <= 8'h2D;  // -
+            68: prog_wr <= 8'h2D;  // -
+            69: prog_wr <= 8'h2D;  // -
+            70: prog_wr <= 8'h2D;  // -
+            71: prog_wr <= 8'h2D;  // -
             72: prog_wr <= 8'h2E;  // .
-            73: prog_wr <= 8'h3C;  // <
-            74: prog_wr <= 8'h2D;  // -
-            75: prog_wr <= 8'h2E;  // .
-            76: prog_wr <= 8'h3C;  // <
-            77: prog_wr <= 8'h2E;  // .
-            78: prog_wr <= 8'h2B;  // +
-            79: prog_wr <= 8'h2B;  // +
-            80: prog_wr <= 8'h2B;  // +
-            81: prog_wr <= 8'h2E;  // .
-            82: prog_wr <= 8'h2D;  // -
-            83: prog_wr <= 8'h2D;  // -
-            84: prog_wr <= 8'h2D;  // -
-            85: prog_wr <= 8'h2D;  // -
-            86: prog_wr <= 8'h2D;  // -
-            87: prog_wr <= 8'h2D;  // -
-            88: prog_wr <= 8'h2E;  // .
-            89: prog_wr <= 8'h2D;  // -
-            90: prog_wr <= 8'h2D;  // -
-            91: prog_wr <= 8'h2D;  // -
-            92: prog_wr <= 8'h2D;  // -
-            93: prog_wr <= 8'h2D;  // -
-            94: prog_wr <= 8'h2D;  // -
-            95: prog_wr <= 8'h2D;  // -
-            96: prog_wr <= 8'h2D;  // -
-            97: prog_wr <= 8'h2E;  // .
-            98: prog_wr <= 8'h3E;  // >
-            99: prog_wr <= 8'h3E;  // >
-            100: prog_wr <= 8'h2B;  // +
-            101: prog_wr <= 8'h2E;  // .
-            102: prog_wr <= 8'h3E;  // >
-            103: prog_wr <= 8'h2B;  // +
-            104: prog_wr <= 8'h2B;  // +
-            105: prog_wr <= 8'h2E;  // .
+            73: prog_wr <= 8'h3E;  // >
             default: prog_wr <= 8'h00;  // NOP
           endcase
           // --- END AUTO-GENERATED CODE ---
+
+          // // --- BEGIN AUTO-GENERATED CODE ---
+          // // PROGRAM LENGTH (PROG_LEN) should be set to: 106
+          // case (iptr)
+          //   0: prog_wr <= 8'h2B;  // +
+          //   1: prog_wr <= 8'h2B;  // +
+          //   2: prog_wr <= 8'h2B;  // +
+          //   3: prog_wr <= 8'h2B;  // +
+          //   4: prog_wr <= 8'h2B;  // +
+          //   5: prog_wr <= 8'h2B;  // +
+          //   6: prog_wr <= 8'h2B;  // +
+          //   7: prog_wr <= 8'h2B;  // +
+          //   8: prog_wr <= 8'h5B;  // [
+          //   9: prog_wr <= 8'h3E;  // >
+          //   10: prog_wr <= 8'h2B;  // +
+          //   11: prog_wr <= 8'h2B;  // +
+          //   12: prog_wr <= 8'h2B;  // +
+          //   13: prog_wr <= 8'h2B;  // +
+          //   14: prog_wr <= 8'h5B;  // [
+          //   15: prog_wr <= 8'h3E;  // >
+          //   16: prog_wr <= 8'h2B;  // +
+          //   17: prog_wr <= 8'h2B;  // +
+          //   18: prog_wr <= 8'h3E;  // >
+          //   19: prog_wr <= 8'h2B;  // +
+          //   20: prog_wr <= 8'h2B;  // +
+          //   21: prog_wr <= 8'h2B;  // +
+          //   22: prog_wr <= 8'h3E;  // >
+          //   23: prog_wr <= 8'h2B;  // +
+          //   24: prog_wr <= 8'h2B;  // +
+          //   25: prog_wr <= 8'h2B;  // +
+          //   26: prog_wr <= 8'h3E;  // >
+          //   27: prog_wr <= 8'h2B;  // +
+          //   28: prog_wr <= 8'h3C;  // <
+          //   29: prog_wr <= 8'h3C;  // <
+          //   30: prog_wr <= 8'h3C;  // <
+          //   31: prog_wr <= 8'h3C;  // <
+          //   32: prog_wr <= 8'h2D;  // -
+          //   33: prog_wr <= 8'h5D;  // ]
+          //   34: prog_wr <= 8'h3E;  // >
+          //   35: prog_wr <= 8'h2B;  // +
+          //   36: prog_wr <= 8'h3E;  // >
+          //   37: prog_wr <= 8'h2B;  // +
+          //   38: prog_wr <= 8'h3E;  // >
+          //   39: prog_wr <= 8'h2D;  // -
+          //   40: prog_wr <= 8'h3E;  // >
+          //   41: prog_wr <= 8'h3E;  // >
+          //   42: prog_wr <= 8'h2B;  // +
+          //   43: prog_wr <= 8'h5B;  // [
+          //   44: prog_wr <= 8'h3C;  // <
+          //   45: prog_wr <= 8'h5D;  // ]
+          //   46: prog_wr <= 8'h3C;  // <
+          //   47: prog_wr <= 8'h2D;  // -
+          //   48: prog_wr <= 8'h5D;  // ]
+          //   49: prog_wr <= 8'h3E;  // >
+          //   50: prog_wr <= 8'h3E;  // >
+          //   51: prog_wr <= 8'h2E;  // .
+          //   52: prog_wr <= 8'h3E;  // >
+          //   53: prog_wr <= 8'h2D;  // -
+          //   54: prog_wr <= 8'h2D;  // -
+          //   55: prog_wr <= 8'h2D;  // -
+          //   56: prog_wr <= 8'h2E;  // .
+          //   57: prog_wr <= 8'h2B;  // +
+          //   58: prog_wr <= 8'h2B;  // +
+          //   59: prog_wr <= 8'h2B;  // +
+          //   60: prog_wr <= 8'h2B;  // +
+          //   61: prog_wr <= 8'h2B;  // +
+          //   62: prog_wr <= 8'h2B;  // +
+          //   63: prog_wr <= 8'h2B;  // +
+          //   64: prog_wr <= 8'h2E;  // .
+          //   65: prog_wr <= 8'h2E;  // .
+          //   66: prog_wr <= 8'h2B;  // +
+          //   67: prog_wr <= 8'h2B;  // +
+          //   68: prog_wr <= 8'h2B;  // +
+          //   69: prog_wr <= 8'h2E;  // .
+          //   70: prog_wr <= 8'h3E;  // >
+          //   71: prog_wr <= 8'h3E;  // >
+          //   72: prog_wr <= 8'h2E;  // .
+          //   73: prog_wr <= 8'h3C;  // <
+          //   74: prog_wr <= 8'h2D;  // -
+          //   75: prog_wr <= 8'h2E;  // .
+          //   76: prog_wr <= 8'h3C;  // <
+          //   77: prog_wr <= 8'h2E;  // .
+          //   78: prog_wr <= 8'h2B;  // +
+          //   79: prog_wr <= 8'h2B;  // +
+          //   80: prog_wr <= 8'h2B;  // +
+          //   81: prog_wr <= 8'h2E;  // .
+          //   82: prog_wr <= 8'h2D;  // -
+          //   83: prog_wr <= 8'h2D;  // -
+          //   84: prog_wr <= 8'h2D;  // -
+          //   85: prog_wr <= 8'h2D;  // -
+          //   86: prog_wr <= 8'h2D;  // -
+          //   87: prog_wr <= 8'h2D;  // -
+          //   88: prog_wr <= 8'h2E;  // .
+          //   89: prog_wr <= 8'h2D;  // -
+          //   90: prog_wr <= 8'h2D;  // -
+          //   91: prog_wr <= 8'h2D;  // -
+          //   92: prog_wr <= 8'h2D;  // -
+          //   93: prog_wr <= 8'h2D;  // -
+          //   94: prog_wr <= 8'h2D;  // -
+          //   95: prog_wr <= 8'h2D;  // -
+          //   96: prog_wr <= 8'h2D;  // -
+          //   97: prog_wr <= 8'h2E;  // .
+          //   98: prog_wr <= 8'h3E;  // >
+          //   99: prog_wr <= 8'h3E;  // >
+          //   100: prog_wr <= 8'h2B;  // +
+          //   101: prog_wr <= 8'h2E;  // .
+          //   102: prog_wr <= 8'h3E;  // >
+          //   103: prog_wr <= 8'h2B;  // +
+          //   104: prog_wr <= 8'h2B;  // +
+          //   105: prog_wr <= 8'h2E;  // .
+          //   default: prog_wr <= 8'h00;  // NOP
+          // endcase
+          // // --- END AUTO-GENERATED CODE ---
 
 
           if (iptr == PROG_LEN) begin
@@ -524,7 +905,6 @@ module cpu_core #(
         end
 
         S_PRE_STACK_WAIT: begin
-          // one-cycle wait for stack_rd (synchronous BRAM)
           state_id <= S_PRE_STACK_READ;
         end
 
@@ -538,12 +918,6 @@ module cpu_core #(
           jump_we <= 1'b1;
 
           state_id <= S_PRE_JUMP_W1;
-          $strobe("[%6t] PRE: mapping '[' at %0d -> ']' at %0d", $time, popped_addr, iptr);
-        end
-
-        S_STACK_WRITE_WAIT1: begin
-          // delay for jump table write to complete
-          state_id <= S_PRE_JUMP_W1;
         end
 
         S_PRE_JUMP_W1: begin
@@ -552,14 +926,8 @@ module cpu_core #(
           jump_wr <= popped_addr;
           jump_we <= 1'b1;
 
-          $strobe("[%6t] PRE: mapping ']' at %0d -> '[' at %0d", $time, iptr, popped_addr);
-
-          // state_id <= S_PRE_JUMP_DONE;
-          state_id <= S_WAIT_100;
-        end
-
-        S_WAIT_100: begin
           state_id <= S_PRE_JUMP_DONE;
+          // state_id <= S_WAIT_100;
         end
 
         S_PRE_JUMP_DONE: begin
@@ -568,9 +936,8 @@ module cpu_core #(
           state_id <= S_PRE_ADDR;
         end
 
-        // -------------------------------------------------------------------
-        // FETCH/EXECUTE: read inst and jump table (when needed) with a wait cycle
-        // -------------------------------------------------------------------
+
+
         S_FETCH_ADDR: begin
           // set addresses for both program read and jump table read (jump_rd used only for '['/']')
           prog_addr_reg <= iptr;
@@ -580,21 +947,13 @@ module cpu_core #(
         end
 
         S_FETCH_WAIT: begin
-          state_id <= S_FETCH_LATCH;
-        end
-
-        S_FETCH_LATCH: begin
-          // now prog_rd and jump_rd are valid for iptr
-          inst <= prog_rd;
-          jmp <= jump_rd;
           state_id <= S_EXECUTE;
         end
-
 
         S_EXECUTE: begin
           $strobe("[%0t] EXECUTE IP=%0d INST=%h PTR=%0d CELL=%0h DATA_ADDR=%0d DATA_RD=%0h", $time,
                   iptr, prog_rd, current_ptr, current_cell, data_addr_reg, data_rd);
-          case (inst)
+          case (prog_rd)
             8'h3E: begin  // '>' - increment data pointer
               dptr_next <= dptr + 1;
               state_id  <= S_PTR_WRITEBACK;
@@ -627,19 +986,19 @@ module cpu_core #(
             end
 
             8'h5B: begin  // '[' : if current_cell == 0 -> jump to matching ']' (jump_rd)
-              $strobe("[%0t] could JUMP from '[' at %0d to ']' at %0d because cell==0", $time,
-                      iptr, jmp);
+              // $strobe("[%0t] could JUMP from '[' at %0d to ']' at %0d because cell==0", $time,
+              //         iptr, jmp);
               if (current_cell == 0) begin
-                iptr <= jmp; // jump_rd contains matching ']' (because we set jump_addr_reg=iptr earlier)
+                iptr <= jump_rd; // jump_rd contains matching ']' (because we set jump_addr_reg=iptr earlier)
               end
               state_id <= S_UPDATE;
             end
 
             8'h5D: begin  // ']' : if current_cell != 0 -> jump back to matching '['
-              $strobe("[%0t] could JUMP from ']' at %0d to '[' at %0d because cell!=0", $time,
-                      iptr, jmp);
+              // $strobe("[%0t] could JUMP from ']' at %0d to '[' at %0d because cell!=0", $time,
+              //         iptr, jmp);
               if (current_cell != 0) begin
-                iptr <= jmp;  // jump_rd contains matching '['
+                iptr <= jump_rd;  // jump_rd contains matching '['
               end
               state_id <= S_UPDATE;
             end
@@ -652,19 +1011,11 @@ module cpu_core #(
 
         // --- WRITEBACK: write cached cell to old address ---
         S_PTR_WRITEBACK: begin
-          $strobe(
-              "[%0t] WRITEBACK start: write_addr=%0d write_data=%0h (current_ptr=%0d dptr_next=%0d)",
-              $time, current_ptr, current_cell, current_ptr, dptr_next);
           data_addr_reg <= current_ptr;  // old pointer
           data_wr       <= current_cell;
           data_we       <= 1'b1;
-          state_id      <= S_PTR_WRITE_WAIT;
-        end
-
-        // --- WAIT: let BRAM register the write ---
-        S_PTR_WRITE_WAIT: begin
-          data_we  <= 1'b0;  // turn off write
-          state_id <= S_PTR_READ_SETUP;
+          // state_id      <= S_PTR_WRITE_WAIT;
+          state_id      <= S_PTR_READ_SETUP;
         end
 
         // --- READ_SETUP: prepare to read new cell from new pointer ---
@@ -678,12 +1029,7 @@ module cpu_core #(
 
         // --- READ_WAIT: wait one cycle for BRAM output ---
         S_PTR_READ_WAIT: begin
-          // $strobe("[%0t] READ_WAIT -> got data_rd=%0h for addr=%0d, current_cell(before)=%0h",
-          //         $time, data_rd, data_addr_reg, current_cell);
-          // current_cell <= data_rd;  // latch new cell value
-          // current_cell_next <= data_rd;
           state_id <= S_PTR_READ_LATCH;
-          // $strobe("[%0t] READ_WAIT -> current cell after update=%0h", $time, current_cell);
         end
 
         S_PTR_READ_LATCH: begin
@@ -696,11 +1042,12 @@ module cpu_core #(
         S_UPDATE: begin
           $strobe("[%0t] S_UPDATE -> current_cell_next=%0h", $time, current_cell_next);
           display <= output_reg;
+          // display <= time_reg[21:14];
           // normal advance
           if (iptr < PROG_LEN) begin
             iptr <= iptr + 1;
-            // state_id <= S_FETCH_ADDR;
-            state_id <= S_STEP_WAIT;
+            state_id <= S_FETCH_ADDR;
+            // state_id <= S_STEP_WAIT;
           end else begin
             // reached program end: stop executing
             executing <= 1'b0;
@@ -710,9 +1057,14 @@ module cpu_core #(
         end
 
         S_STEP_WAIT: begin
-          // if (step_req) begin
-          state_id <= S_FETCH_ADDR;
-          // end
+          // if current inst was . then wait for step_req before next fetch
+          if (prog_rd == 8'h2E) begin
+            if (step_req) begin
+              state_id <= S_FETCH_ADDR;
+            end
+          end else begin
+            state_id <= S_FETCH_ADDR;
+          end
         end
 
         default: begin
