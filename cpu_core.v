@@ -35,7 +35,7 @@ module cpu_core #(
   localparam S_FETCH_ADDR = 5'd10;  // put iptr to prog_addr_reg and jump_addr_reg
   localparam S_FETCH_WAIT = 5'd11;  // wait for prog_rd and jump_rd valid
   localparam S_EXECUTE = 5'd12;
-  localparam S_UPDATE = 5'd13;
+  // localparam S_UPDATE = 5'd13;
 
   // Data pointer states
   localparam S_PTR_WRITEBACK = 5'd14;
@@ -58,10 +58,10 @@ module cpu_core #(
   // -------------------------------------------------------------------------
   // Program memory (synchronous BRAM)
   // -------------------------------------------------------------------------
-  reg  [PROG_ADDR_WIDTH-1:0] prog_addr_reg;
-  reg  [                7:0] prog_wr;
-  reg                        prog_we;
-  wire [                7:0] prog_rd;
+  // reg  [PROG_ADDR_WIDTH-1:0] prog_addr_reg;
+  reg  [7:0] prog_wr;
+  reg        prog_we;
+  wire [7:0] prog_rd;
 
   bram_sp #(
       .ADDR_WIDTH(PROG_ADDR_WIDTH),
@@ -69,7 +69,7 @@ module cpu_core #(
   ) program_memory (
       .clk(clk),
       .write_enable(prog_we),
-      .addr(prog_addr_reg),
+      .addr(iptr),
       .data_in(prog_wr),
       .data_out(prog_rd)
   );
@@ -138,23 +138,21 @@ module cpu_core #(
       .data_out(jump_rd)
   );
 
-  // -------------------------------------------------------------------------
-  // Control + misc regs
-  // -------------------------------------------------------------------------
-  reg     [PROG_ADDR_WIDTH-1:0] iptr;
-  reg     [                7:0] inst;
-  reg     [PROG_ADDR_WIDTH-1:0] jmp;
-  reg     [                7:0] output_reg;
-  reg     [                7:0] exec_count;
-  reg     [PROG_ADDR_WIDTH-1:0] popped_addr;
+  reg [PROG_ADDR_WIDTH-1:0] iptr;
+  reg [7:0] inst;
+  reg [PROG_ADDR_WIDTH-1:0] jmp;
+  reg [7:0] output_reg;
+  reg [7:0] exec_count;
+  reg [PROG_ADDR_WIDTH-1:0] popped_addr;
 
-  reg     [PROG_ADDR_WIDTH-1:0] zero_ptr;
-  reg     [                7:0] current_cell_next;
+  reg [PROG_ADDR_WIDTH-1:0] zero_ptr;
+  reg [7:0] current_cell_next;
 
-  // -------------------------------------------------------------------------
-  // Reset / default initialization
-  // -------------------------------------------------------------------------
-  integer                       i;
+
+  wire use_jump_rd = (prog_rd == 8'h5B && current_cell == 0) || 
+                   (prog_rd == 8'h5D && current_cell != 0);
+
+  integer i;
   always @(posedge clk or negedge resetn) begin
     if (!resetn) begin
       // core state
@@ -172,7 +170,7 @@ module cpu_core #(
       // pointers / counters
       iptr              <= {PROG_ADDR_WIDTH{1'b0}};
 
-      prog_addr_reg     <= {PROG_ADDR_WIDTH{1'b0}};
+      // prog_addr_reg     <= {PROG_ADDR_WIDTH{1'b0}};
       dptr              <= {PROG_ADDR_WIDTH{1'b0}};
       dptr_next         <= {PROG_ADDR_WIDTH{1'b0}};
       data_addr_reg     <= {PROG_ADDR_WIDTH{1'b0}};
@@ -212,12 +210,12 @@ module cpu_core #(
           if (load_req) begin
             loaded <= 1'b0;
             iptr <= {PROG_ADDR_WIDTH{1'b0}};
-            prog_addr_reg <= {PROG_ADDR_WIDTH{1'b0}};
+            // prog_addr_reg <= {PROG_ADDR_WIDTH{1'b0}};
             state_id <= S_LOAD;
           end else if (start_req && loaded) begin
             executing <= 1'b1;
             iptr <= {PROG_ADDR_WIDTH{1'b0}};
-            prog_addr_reg <= {PROG_ADDR_WIDTH{1'b0}};
+            // prog_addr_reg <= {PROG_ADDR_WIDTH{1'b0}};
             exec_count <= 8'h00;
 
             // initialize data/cache
@@ -253,7 +251,10 @@ module cpu_core #(
         // -------------------------------------------------------------------
         S_LOAD: begin
           prog_we <= 1'b1;
-          prog_addr_reg <= iptr;
+
+          // TODO: CHECK REDUCE STATE?
+
+          // prog_addr_reg <= iptr;
 
           // // program: +[+.]
           // case (iptr)
@@ -864,12 +865,7 @@ module cpu_core #(
         // PREPROCESS: set address -> wait -> read -> handle '[' and ']'
         // -------------------------------------------------------------------
         S_PRE_ADDR: begin
-          prog_addr_reg <= iptr;  // request program memory at iptr
-          state_id <= S_PRE_WAIT;
-        end
-
-        S_PRE_WAIT: begin
-          // one cycle for prog_rd to become valid
+          // prog_addr_reg <= iptr;  // request program memory at iptr
           state_id <= S_PRE_READ;
         end
 
@@ -940,13 +936,11 @@ module cpu_core #(
 
         S_FETCH_ADDR: begin
           // set addresses for both program read and jump table read (jump_rd used only for '['/']')
-          prog_addr_reg <= iptr;
-          jump_addr_reg <= iptr;
+          // prog_addr_reg <= iptr;
+          // jump_addr_reg <= iptr;
           exec_count <= exec_count + 1;
-          state_id <= S_FETCH_WAIT;
-        end
-
-        S_FETCH_WAIT: begin
+          current_cell <= current_cell_next;
+          // state_id <= S_FETCH_WAIT;
           state_id <= S_EXECUTE;
         end
 
@@ -956,69 +950,84 @@ module cpu_core #(
           case (prog_rd)
             8'h3E: begin  // '>' - increment data pointer
               dptr_next <= dptr + 1;
-              state_id  <= S_PTR_WRITEBACK;
+              // state_id  <= S_PTR_WRITEBACK;
             end
 
             8'h3C: begin  // '<' - decrement data pointer
               dptr_next <= dptr - 1;
-              state_id  <= S_PTR_WRITEBACK;
+              // state_id  <= S_PTR_WRITEBACK;
             end
 
             8'h2B: begin  // '+'
               // current_cell <= current_cell + 1;
               current_cell_next <= current_cell + 1;
-              state_id <= S_UPDATE;
+              // state_id <= S_FETCH_ADDR;
             end
 
             8'h2D: begin  // '-'
               // current_cell <= current_cell - 1;
               current_cell_next <= current_cell - 1;
-              state_id <= S_UPDATE;
+              // state_id <= S_FETCH_ADDR;
             end
 
             8'h2E: begin  // '.'
               output_reg <= current_cell;
-              state_id   <= S_UPDATE;
+              // state_id   <= S_FETCH_ADDR;
             end
 
             8'h2C: begin  // ',' (input not implemented)
-              state_id <= S_UPDATE;
+              // state_id <= S_FETCH_ADDR;
             end
+
+            // jumping now implemented by use_jump_rd wire.
 
             8'h5B: begin  // '[' : if current_cell == 0 -> jump to matching ']' (jump_rd)
               // $strobe("[%0t] could JUMP from '[' at %0d to ']' at %0d because cell==0", $time,
               //         iptr, jmp);
-              if (current_cell == 0) begin
-                iptr <= jump_rd; // jump_rd contains matching ']' (because we set jump_addr_reg=iptr earlier)
-              end
-              state_id <= S_UPDATE;
+              // if (current_cell == 0) begin
+              //   iptr <= jump_rd; // jump_rd contains matching ']' (because we set jump_addr_reg=iptr earlier)
+              // end
+              // state_id <= S_FETCH_ADDR;
             end
 
             8'h5D: begin  // ']' : if current_cell != 0 -> jump back to matching '['
               // $strobe("[%0t] could JUMP from ']' at %0d to '[' at %0d because cell!=0", $time,
               //         iptr, jmp);
-              if (current_cell != 0) begin
-                iptr <= jump_rd;  // jump_rd contains matching '['
-              end
-              state_id <= S_UPDATE;
+              // if (current_cell != 0) begin
+              //   iptr <= jump_rd;  // jump_rd contains matching '['
+              // end
+              // state_id <= S_FETCH_ADDR;
             end
 
             default: begin
-              state_id <= S_UPDATE;
+              // state_id <= S_FETCH_ADDR;
             end
           endcase
+
+          display <= output_reg;
+          // display <= time_reg[21:14];
+          if (iptr < PROG_LEN) begin  // todo: edge case where we jump past program??
+            iptr <= use_jump_rd ? jump_rd + 1 : iptr + 1;
+            jump_addr_reg <= use_jump_rd ? jump_rd + 1 : iptr + 1;
+            // state_id <= S_FETCH_ADDR;
+            // state_id <= S_STEP_WAIT;
+
+            state_id <= (prog_rd == 8'h3E || prog_rd == 8'h3C) ? S_PTR_WRITEBACK : S_STEP_WAIT;
+
+          end else begin
+            // reached end: stop executing
+            executing <= 1'b0;
+            state_id  <= S_IDLE;
+          end
         end
 
-        // --- WRITEBACK: write cached cell to old address ---
         S_PTR_WRITEBACK: begin
           data_addr_reg <= current_ptr;  // old pointer
           data_wr       <= current_cell;
           data_we       <= 1'b1;
-          // state_id      <= S_PTR_WRITE_WAIT;
           state_id      <= S_PTR_READ_SETUP;
         end
 
-        // --- READ_SETUP: prepare to read new cell from new pointer ---
         S_PTR_READ_SETUP: begin
           $strobe("[%0t] READ_SETUP -> request read addr=%0d", $time, dptr_next);
           dptr          <= dptr_next;  // move logical pointer
@@ -1027,7 +1036,6 @@ module cpu_core #(
           state_id      <= S_PTR_READ_WAIT;
         end
 
-        // --- READ_WAIT: wait one cycle for BRAM output ---
         S_PTR_READ_WAIT: begin
           state_id <= S_PTR_READ_LATCH;
         end
@@ -1036,25 +1044,25 @@ module cpu_core #(
           $strobe("[%0t] READ_LATCH -> got data_rd=%0h for addr=%0d", $time, data_addr_reg,
                   data_rd);
           current_cell_next <= data_rd;
-          state_id          <= S_UPDATE;
+          state_id          <= S_FETCH_ADDR;
         end
 
-        S_UPDATE: begin
-          $strobe("[%0t] S_UPDATE -> current_cell_next=%0h", $time, current_cell_next);
-          display <= output_reg;
-          // display <= time_reg[21:14];
-          // normal advance
-          if (iptr < PROG_LEN) begin
-            iptr <= iptr + 1;
-            state_id <= S_FETCH_ADDR;
-            // state_id <= S_STEP_WAIT;
-          end else begin
-            // reached program end: stop executing
-            executing <= 1'b0;
-            state_id  <= S_IDLE;
-          end
-          current_cell <= current_cell_next;
-        end
+        // S_UPDATE: begin
+        //   // $strobe("[%0t] S_UPDATE -> current_cell_next=%0h", $time, current_cell_next);
+        //   // display <= output_reg;
+        //   // // display <= time_reg[21:14];
+        //   // if (iptr < PROG_LEN) begin
+        //   //   iptr <= iptr + 1;
+        //   //   jump_addr_reg <= iptr + 1;
+        //   //   state_id <= S_FETCH_ADDR;
+        //   //   // state_id <= S_STEP_WAIT;
+        //   // end else begin
+        //   //   // reached end: stop executing
+        //   //   executing <= 1'b0;
+        //   //   state_id  <= S_IDLE;
+        //   // end
+        //   current_cell <= current_cell_next;
+        // end
 
         S_STEP_WAIT: begin
           // if current inst was . then wait for step_req before next fetch
