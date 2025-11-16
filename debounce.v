@@ -7,10 +7,10 @@ module debounce #(
     output reg clean  // stable debounced output
 );
 
-  //   // for sim, just pass through
-  //   always @(posedge clk) begin
-  //     clean <= noisy;
-  //   end
+  // // for sim, just pass through
+  // always @(posedge clk) begin
+  //   clean <= noisy;
+  // end
 
   reg [CTR_WIDTH-1:0] counter = 0;
   reg sync_0 = 0, sync_1 = 0;
