@@ -1,7 +1,7 @@
 `default_nettype none
 module cpu_core #(
-    parameter PROG_ADDR_WIDTH = 11,
-    parameter PROG_LEN = 2047
+    parameter PROG_ADDR_WIDTH = 14,
+    parameter PROG_LEN = 16383
 ) (
     input  wire       clk,
     // input  wire [21:0] time_reg,
@@ -43,15 +43,23 @@ module cpu_core #(
   reg                        prog_we;
   wire [                7:0] prog_rd;
 
-  bram_sp #(
-      .ADDR_WIDTH(PROG_ADDR_WIDTH),
-      .DATA_WIDTH(8)
-  ) program_memory (
+  // bram_sp #(
+  //     .ADDR_WIDTH(PROG_ADDR_WIDTH),
+  //     .DATA_WIDTH(8)
+  // ) program_memory (
+  //     .clk(clk),
+  //     .write_enable(prog_we),
+  //     .addr(iptr),
+  //     .data_in(prog_wr),
+  //     .data_out(prog_rd)
+  // );
+
+  spram_stupid program_memory (
       .clk(clk),
       .write_enable(prog_we),
       .addr(iptr),
-      .data_in(prog_wr),
-      .data_out(prog_rd)
+      .data_in({8'h00, prog_wr}),
+      .data_out(prog_rd)  // only lower 8 bits used
   );
 
   // brainfuck data tape
@@ -60,15 +68,17 @@ module cpu_core #(
   reg                        data_we;
   wire [                7:0] data_rd;
 
-  bram_sp #(
-      .ADDR_WIDTH(PROG_ADDR_WIDTH),
-      .DATA_WIDTH(8)
-  ) data_memory (
+  // bram_sp #(
+  //     .ADDR_WIDTH(PROG_ADDR_WIDTH),
+  //     .DATA_WIDTH(8)
+  // )
+
+  spram_stupid data_memory (
       .clk(clk),
       .write_enable(data_we),
       .addr(data_addr_reg),
-      .data_in(data_wr),
-      .data_out(data_rd)
+      .data_in({8'h00, data_wr}),
+      .data_out(data_rd)  // only lower 8 bits used
   );
 
   reg  [                7:0] current_cell;  // cached data cell
@@ -79,20 +89,34 @@ module cpu_core #(
 
   // bracket stack, stores addresses of [ to match up with ]
   // reg  [PROG_ADDR_WIDTH-2:0] stack_addr_reg;  
+  // reg  [PROG_ADDR_WIDTH-1:0] stack_wr;
+  // reg                        stack_we;
+  // wire [PROG_ADDR_WIDTH-1:0] stack_rd;
+  // reg  [PROG_ADDR_WIDTH-2:0] stack_ptr;  // at most half the program is [
+
+  // bram_sp #(
+  //     .ADDR_WIDTH(PROG_ADDR_WIDTH - 1),
+  //     .DATA_WIDTH(PROG_ADDR_WIDTH)
+  // ) bracket_stack (
+  //     .clk(clk),
+  //     .write_enable(stack_we),
+  //     .addr(stack_ptr),
+  //     .data_in(stack_wr),
+  //     .data_out(stack_rd)
+  // );
+
+  reg  [PROG_ADDR_WIDTH-1:0] stack_addr_reg;
   reg  [PROG_ADDR_WIDTH-1:0] stack_wr;
   reg                        stack_we;
   wire [PROG_ADDR_WIDTH-1:0] stack_rd;
-  reg  [PROG_ADDR_WIDTH-2:0] stack_ptr;  // at most half the program is [
+  reg  [PROG_ADDR_WIDTH-1:0] stack_ptr;  // at most half the program is [
 
-  bram_sp #(
-      .ADDR_WIDTH(PROG_ADDR_WIDTH - 1),
-      .DATA_WIDTH(PROG_ADDR_WIDTH)
-  ) bracket_stack (
+  spram_stupid bracket_stack (
       .clk(clk),
       .write_enable(stack_we),
       .addr(stack_ptr),
-      .data_in(stack_wr),
-      .data_out(stack_rd)
+      .data_in({{(16 - PROG_ADDR_WIDTH) {1'b0}}, stack_wr}),
+      .data_out(stack_rd)  // only lower PROG_ADDR_WIDTH bits used
   );
 
   // jump table stores address of matching bracket for each bracket.
@@ -101,15 +125,23 @@ module cpu_core #(
   reg                        jump_we;
   wire [PROG_ADDR_WIDTH-1:0] jump_rd;
 
-  bram_sp #(
-      .ADDR_WIDTH(PROG_ADDR_WIDTH),
-      .DATA_WIDTH(PROG_ADDR_WIDTH)
-  ) jump_table (
+  // bram_sp #(
+  //     .ADDR_WIDTH(PROG_ADDR_WIDTH),
+  //     .DATA_WIDTH(PROG_ADDR_WIDTH)
+  // ) jump_table (
+  //     .clk(clk),
+  //     .write_enable(jump_we),
+  //     .addr(jump_addr_reg),
+  //     .data_in(jump_wr),
+  //     .data_out(jump_rd)
+  // );
+
+  spram_stupid jump_table (
       .clk(clk),
       .write_enable(jump_we),
       .addr(jump_addr_reg),
-      .data_in(jump_wr),
-      .data_out(jump_rd)
+      .data_in({{(16 - PROG_ADDR_WIDTH) {1'b0}}, jump_wr}),
+      .data_out(jump_rd)  // only lower PROG_ADDR_WIDTH bits used
   );
 
   reg [7:0] last_inst;
@@ -948,10 +980,10 @@ module cpu_core #(
           if (iptr < PROG_LEN) begin
             // todo: edge case where we jump past program??
             use_jump_rd = ((prog_rd == 8'h5B && current_cell == 8'h00) || (prog_rd == 8'h5D && current_cell != 8'h00));
-            iptr          <= use_jump_rd ? jump_rd + 1 : iptr + 1;
+            iptr <= use_jump_rd ? jump_rd + 1 : iptr + 1;
             jump_addr_reg <= use_jump_rd ? jump_rd + 1 : iptr + 1;
-            // state_id <= (prog_rd == 8'h3E || prog_rd == 8'h3C) ? S_PTR_WRITEBACK : S_FETCH_ADDR;
-            state_id      <= (prog_rd == 8'h3E || prog_rd == 8'h3C) ? S_PTR_WRITEBACK : S_STEP_WAIT;
+            state_id <= (prog_rd == 8'h3E || prog_rd == 8'h3C) ? S_PTR_WRITEBACK : S_EXEC_WAIT;
+            // state_id      <= (prog_rd == 8'h3E || prog_rd == 8'h3C) ? S_PTR_WRITEBACK : S_STEP_WAIT;
           end else begin
             // reached end: stop executing
             executing <= 1'b0;
@@ -960,7 +992,7 @@ module cpu_core #(
         end
 
         S_PTR_WRITEBACK: begin
-          data_addr_reg <= current_ptr;  // old pointer
+          data_addr_reg <= current_ptr;
           data_wr       <= current_cell;
           data_we       <= 1'b1;
           state_id      <= S_PTR_READ_SETUP;
@@ -998,4 +1030,21 @@ module cpu_core #(
     end
   end
 
+endmodule
+
+
+module spram_stupid (
+    input  wire        clk,
+    input  wire        write_enable,
+    input  wire [13:0] addr,
+    input  wire [15:0] data_in,
+    output reg  [15:0] data_out
+);
+  spram spram_inst (
+      .clk(clk),
+      .we(write_enable ? 4'b1111 : 4'b0000),
+      .addr(addr),
+      .data_in(data_in),
+      .data_out(data_out)
+  );
 endmodule
