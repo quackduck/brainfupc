@@ -41,44 +41,31 @@ module cpu_core #(
   reg  [PROG_ADDR_WIDTH-1:0] iptr;
   reg  [                7:0] prog_wr;
   reg                        prog_we;
-  wire [                7:0] prog_rd;
 
-  // bram_sp #(
-  //     .ADDR_WIDTH(PROG_ADDR_WIDTH),
-  //     .DATA_WIDTH(8)
-  // ) program_memory (
-  //     .clk(clk),
-  //     .write_enable(prog_we),
-  //     .addr(iptr),
-  //     .data_in(prog_wr),
-  //     .data_out(prog_rd)
-  // );
+  wire [               15:0] _prog_rd;
+  wire [                7:0] prog_rd = _prog_rd[7:0];  // only lower 8 bits used
 
   spram_stupid program_memory (
       .clk(clk),
       .write_enable(prog_we),
       .addr(iptr),
       .data_in({8'h00, prog_wr}),
-      .data_out(prog_rd)  // only lower 8 bits used
+      .data_out(_prog_rd)
   );
 
   // brainfuck data tape
   reg  [PROG_ADDR_WIDTH-1:0] data_addr_reg;
   reg  [                7:0] data_wr;
   reg                        data_we;
-  wire [                7:0] data_rd;
-
-  // bram_sp #(
-  //     .ADDR_WIDTH(PROG_ADDR_WIDTH),
-  //     .DATA_WIDTH(8)
-  // )
+  wire [               15:0] _data_rd;
+  wire [                7:0] data_rd = _data_rd[7:0];  // only lower 8 bits used
 
   spram_stupid data_memory (
       .clk(clk),
       .write_enable(data_we),
       .addr(data_addr_reg),
       .data_in({8'h00, data_wr}),
-      .data_out(data_rd)  // only lower 8 bits used
+      .data_out(_data_rd)
   );
 
   reg  [                7:0] current_cell;  // cached data cell
@@ -87,28 +74,12 @@ module cpu_core #(
   reg  [PROG_ADDR_WIDTH-1:0] dptr_next;
 
 
-  // bracket stack, stores addresses of [ to match up with ]
-  // reg  [PROG_ADDR_WIDTH-2:0] stack_addr_reg;  
-  // reg  [PROG_ADDR_WIDTH-1:0] stack_wr;
-  // reg                        stack_we;
-  // wire [PROG_ADDR_WIDTH-1:0] stack_rd;
-  // reg  [PROG_ADDR_WIDTH-2:0] stack_ptr;  // at most half the program is [
-
-  // bram_sp #(
-  //     .ADDR_WIDTH(PROG_ADDR_WIDTH - 1),
-  //     .DATA_WIDTH(PROG_ADDR_WIDTH)
-  // ) bracket_stack (
-  //     .clk(clk),
-  //     .write_enable(stack_we),
-  //     .addr(stack_ptr),
-  //     .data_in(stack_wr),
-  //     .data_out(stack_rd)
-  // );
-
+  // bracket stack, stores addresses of [ to match up with ]. we could save half the memory by noticing that the stack can never store more than (prog_len/2) addresses
   reg  [PROG_ADDR_WIDTH-1:0] stack_addr_reg;
   reg  [PROG_ADDR_WIDTH-1:0] stack_wr;
   reg                        stack_we;
-  wire [PROG_ADDR_WIDTH-1:0] stack_rd;
+  wire [               15:0] _stack_rd;
+  wire [PROG_ADDR_WIDTH-1:0] stack_rd = _stack_rd[PROG_ADDR_WIDTH-1:0];
   reg  [PROG_ADDR_WIDTH-1:0] stack_ptr;  // at most half the program is [
 
   spram_stupid bracket_stack (
@@ -116,14 +87,15 @@ module cpu_core #(
       .write_enable(stack_we),
       .addr(stack_ptr),
       .data_in({{(16 - PROG_ADDR_WIDTH) {1'b0}}, stack_wr}),
-      .data_out(stack_rd)  // only lower PROG_ADDR_WIDTH bits used
+      .data_out(_stack_rd)  // only lower PROG_ADDR_WIDTH bits used
   );
 
   // jump table stores address of matching bracket for each bracket.
   reg  [PROG_ADDR_WIDTH-1:0] jump_addr_reg;
   reg  [PROG_ADDR_WIDTH-1:0] jump_wr;
   reg                        jump_we;
-  wire [PROG_ADDR_WIDTH-1:0] jump_rd;
+  wire [               15:0] _jump_rd;
+  wire [PROG_ADDR_WIDTH-1:0] jump_rd = _jump_rd[PROG_ADDR_WIDTH-1:0];
 
   // bram_sp #(
   //     .ADDR_WIDTH(PROG_ADDR_WIDTH),
@@ -141,7 +113,7 @@ module cpu_core #(
       .write_enable(jump_we),
       .addr(jump_addr_reg),
       .data_in({{(16 - PROG_ADDR_WIDTH) {1'b0}}, jump_wr}),
-      .data_out(jump_rd)  // only lower PROG_ADDR_WIDTH bits used
+      .data_out(_jump_rd)  // only lower PROG_ADDR_WIDTH bits used
   );
 
   reg [7:0] last_inst;
@@ -176,7 +148,7 @@ module cpu_core #(
       current_cell      <= 8'h00;
       current_cell_next <= 8'h00;
 
-      stack_ptr         <= {PROG_ADDR_WIDTH - 1{1'b0}};
+      stack_ptr         <= {PROG_ADDR_WIDTH{1'b0}};
       stack_wr          <= {PROG_ADDR_WIDTH{1'b0}};
       popped_addr       <= {PROG_ADDR_WIDTH{1'b0}};
 
@@ -234,7 +206,7 @@ module cpu_core #(
             current_cell      <= 8'h00;
             current_cell_next <= 8'h00;
 
-            stack_ptr         <= {PROG_ADDR_WIDTH - 1{1'b0}};
+            stack_ptr         <= {PROG_ADDR_WIDTH{1'b0}};
             stack_wr          <= {PROG_ADDR_WIDTH{1'b0}};
             popped_addr       <= {PROG_ADDR_WIDTH{1'b0}};
 
@@ -938,8 +910,6 @@ module cpu_core #(
         end
 
         S_EXECUTE: begin
-          $strobe("[%0t] EXECUTE IP=%0d INST=%h PTR=%0d CELL=%0h DATA_ADDR=%0d DATA_RD=%0h", $time,
-                  iptr, prog_rd, current_ptr, current_cell, data_addr_reg, data_rd);
           case (prog_rd)
             8'h3E: begin  // '>' - increment data pointer
               dptr_next <= dptr + 1;
@@ -982,7 +952,7 @@ module cpu_core #(
             use_jump_rd = ((prog_rd == 8'h5B && current_cell == 8'h00) || (prog_rd == 8'h5D && current_cell != 8'h00));
             iptr <= use_jump_rd ? jump_rd + 1 : iptr + 1;
             jump_addr_reg <= use_jump_rd ? jump_rd + 1 : iptr + 1;
-            state_id <= (prog_rd == 8'h3E || prog_rd == 8'h3C) ? S_PTR_WRITEBACK : S_EXEC_WAIT;
+            state_id <= (prog_rd == 8'h3E || prog_rd == 8'h3C) ? S_PTR_WRITEBACK : S_EXEC_WAIT; // todo: skip write and go to read if cell value not changed.
             // state_id      <= (prog_rd == 8'h3E || prog_rd == 8'h3C) ? S_PTR_WRITEBACK : S_STEP_WAIT;
           end else begin
             // reached end: stop executing
@@ -999,7 +969,6 @@ module cpu_core #(
         end
 
         S_PTR_READ_SETUP: begin
-          $strobe("[%0t] READ_SETUP -> request read addr=%0d", $time, dptr_next);
           dptr          <= dptr_next;  // move logical pointer
           current_ptr   <= dptr_next;
           data_addr_reg <= dptr_next;  // request new address read
@@ -1011,13 +980,11 @@ module cpu_core #(
         end
 
         S_PTR_READ_LATCH: begin
-          $strobe("[%0t] READ_LATCH -> got data_rd=%0h for addr=%0d", $time, data_addr_reg,
-                  data_rd);
           current_cell_next <= data_rd;
           state_id          <= S_EXEC_WAIT;
         end
 
-        S_STEP_WAIT: begin
+        S_STEP_WAIT: begin  // todo: just merge into exec wait.
           // if we just executed . then wait for step_req before next fetch
           state_id <= (last_inst == 8'h2E && !step_req) ? S_STEP_WAIT : S_EXEC_WAIT;
         end
