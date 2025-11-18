@@ -122,7 +122,7 @@ module top (
   );
 
   // status leds
-  assign LED1 = ~(state_id == 5'd0);  // IDLE
+  assign LED1 = ~(state_id == 5'd0);  // not IDLE
   // assign LED2 = (state_id == 3'd1);  // LOAD
   assign LED2 = (state_id == 5'd17);  // STEP WAIT
   assign LED3 = (state_id == 5'd2);  // PREPROCESS (unused now)

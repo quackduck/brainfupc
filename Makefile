@@ -8,7 +8,7 @@ SRCS = top.sv \
 	   debounce.sv \
 	   cpu_core.sv \
 	   spram.sv \
-	   hsync_generator.sv \
+	   hvsync_generator.sv \
 	   loader.sv
 
 all: $(PROJ).rpt $(PROJ).bin

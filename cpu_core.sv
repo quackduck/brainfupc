@@ -1,7 +1,7 @@
 `default_nettype none
 module cpu_core #(
     parameter int PROG_ADDR_WIDTH = 14,
-    parameter int PROG_LEN = 16383
+    parameter logic [PROG_ADDR_WIDTH-1:0] PROG_LEN = 16383
 ) (
     input logic clk,
 
@@ -55,9 +55,9 @@ module cpu_core #(
   logic [                7:0] prog_wr;  // owned by loader
   logic                       prog_we;  // owned by loader
 
-  spram_stupid program_memory (
+  spram program_memory (
       .clk(clk),
-      .write_enable(prog_we),
+      .we(prog_we ? 4'b1111 : 4'b0000),
       .addr(loaded ? iptr : loader_addr),
       .data_in({8'h00, prog_wr}),
       .data_out(_prog_rd)
@@ -86,26 +86,21 @@ module cpu_core #(
 
   // Dual-port BRAM just for data tape so we can display.
   (* syn_ramstyle = "block_ram" *)
-  logic [                7:0] data_mem[0:4096-1];
+  logic [                7:0] data_mem[0:4096-1];  // unfortunately limited by bram...
 
 
   // Port A: CPU side (read/write) // todo: maybe switch this to save on CPU cycles? we dont care too much about vga.
   always_ff @(posedge clk) begin
     if (data_we) data_mem[dptr] <= data_wr;
-    data_rd <= data_mem[dptr];  // or use separate read addr if you want
+    data_rd <= data_mem[dptr];
   end
 
   // Port B: VGA read-only
   logic [7:0] vga_cell_reg;
-  // always_ff @(posedge clk) vga_cell <= data_mem[vga_data_addr];
-  // assign vga_cell = vga_cell_reg;
   assign vga_cell = data_mem[vga_data_addr];
 
   logic [                7:0] current_cell;  // cached data cell
-  // logic [PROG_ADDR_WIDTH-1:0] current_ptr;
-  // logic [PROG_ADDR_WIDTH-1:0] dptr;
   logic [PROG_ADDR_WIDTH-1:0] dptr_next;
-
 
   // bracket stack, stores addresses of [ to match up with ]. we could save half the memory by noticing that the stack can never store more than (prog_len/2) addresses
   logic [PROG_ADDR_WIDTH-1:0] stack_wr;
@@ -116,9 +111,9 @@ module cpu_core #(
 
   logic [PROG_ADDR_WIDTH-1:0] stack_ptr;  // at most half the program is [
 
-  spram_stupid bracket_stack (
+  spram bracket_stack (
       .clk(clk),
-      .write_enable(stack_we),
+      .we(stack_we ? 4'b1111 : 4'b0000),
       .addr(stack_ptr),
       .data_in({{(16 - PROG_ADDR_WIDTH) {1'b0}}, stack_wr}),
       .data_out(_stack_rd)  // only lower PROG_ADDR_WIDTH bits used
@@ -133,9 +128,9 @@ module cpu_core #(
   logic [               15:0] _jump_rd;
   assign jump_rd = _jump_rd[PROG_ADDR_WIDTH-1:0];
 
-  spram_stupid jump_table (
+  spram jump_table (
       .clk(clk),
-      .write_enable(jump_we),
+      .we(jump_we ? 4'b1111 : 4'b0000),
       .addr(jump_addr_reg),
       .data_in({{(16 - PROG_ADDR_WIDTH) {1'b0}}, jump_wr}),
       .data_out(_jump_rd)  // only lower PROG_ADDR_WIDTH bits used
@@ -154,41 +149,39 @@ module cpu_core #(
                       (prog_rd == 8'h5D && current_cell != 8'h00);
   end
 
+  task automatic do_reset();
+    executing         <= '0;
+    display           <= '0;
+
+    data_we           <= '0;
+    stack_we          <= '0;
+    jump_we           <= '0;
+    iptr              <= '0;
+
+    dptr              <= '0;
+    dptr_next         <= '0;
+
+    current_cell      <= '0;
+    current_cell_next <= '0;
+
+    stack_ptr         <= '0;
+    stack_wr          <= '0;
+    popped_addr       <= '0;
+
+    jump_addr_reg     <= '0;
+    jump_wr           <= '0;
+
+    last_inst         <= '0;
+    exec_count        <= '0;
+    zero_ptr          <= '0;
+  endtask
+
   always_ff @(posedge clk or negedge resetn) begin : cpu_fsm
     if (!resetn) begin
-      state_id          <= S_IDLE;
-      executing         <= 1'b0;
-      display           <= 8'h00;
-
-      // prog_we           <= 1'b0;
-      data_we           <= 1'b0;
-      stack_we          <= 1'b0;
-      jump_we           <= 1'b0;
-
-      iptr              <= {PROG_ADDR_WIDTH{1'b0}};
-
-      // dptr              <= {PROG_ADDR_WIDTH{1'b0}};
-      dptr_next         <= {PROG_ADDR_WIDTH{1'b0}};
-      dptr              <= {PROG_ADDR_WIDTH{1'b0}};
-
-      // current_ptr       <= {PROG_ADDR_WIDTH{1'b0}};
-      current_cell      <= 8'h00;
-      current_cell_next <= 8'h00;
-
-      stack_ptr         <= {PROG_ADDR_WIDTH{1'b0}};
-      stack_wr          <= {PROG_ADDR_WIDTH{1'b0}};
-      popped_addr       <= {PROG_ADDR_WIDTH{1'b0}};
-
-      jump_addr_reg     <= {PROG_ADDR_WIDTH{1'b0}};
-      jump_wr           <= {PROG_ADDR_WIDTH{1'b0}};
-
-      last_inst         <= 8'h00;
-      exec_count        <= 32'd0;
-
-      zero_ptr          <= {PROG_ADDR_WIDTH{1'b0}};
+      do_reset();
+      state_id <= S_IDLE;
     end else begin
-      // these get overriden as needed.
-      // prog_we  <= 1'b0;
+      // these get overridden as needed.
       data_we  <= 1'b0;
       stack_we <= 1'b0;
       jump_we  <= 1'b0;
@@ -197,57 +190,18 @@ module cpu_core #(
         S_IDLE: begin
           executing <= 1'b0;
           if (start_req && loaded) begin
-            executing         <= 1'b1;
-            // iptr <= {PROG_ADDR_WIDTH{1'b0}};
-            // // prog_addr_reg <= {PROG_ADDR_WIDTH{1'b0}};
-            // exec_count <= 8'h00;
-
-            // // initialize data/cache
-            // dptr <= {PROG_ADDR_WIDTH{1'b0}};
-            // current_ptr <= {PROG_ADDR_WIDTH{1'b0}};
-            // current_cell <= 8'h00;
-
-            // // preprocessing state init
-            // stack_ptr <= {PROG_ADDR_WIDTH - 1{1'b0}};
-            // jump_addr_reg <= {PROG_ADDR_WIDTH{1'b0}};
-            // popped_addr <= {PROG_ADDR_WIDTH{1'b0}};
-
-            executing         <= 1'b0;
-            display           <= 8'h00;
-
-            // pointers / counters
-            iptr              <= {PROG_ADDR_WIDTH{1'b0}};
-
-            // dptr              <= {PROG_ADDR_WIDTH{1'b0}};
-            dptr_next         <= {PROG_ADDR_WIDTH{1'b0}};
-            dptr              <= {PROG_ADDR_WIDTH{1'b0}};
-
-            // current_ptr       <= {PROG_ADDR_WIDTH{1'b0}};
-            current_cell      <= 8'h00;
-            current_cell_next <= 8'h00;
-
-            stack_ptr         <= {PROG_ADDR_WIDTH{1'b0}};
-            stack_wr          <= {PROG_ADDR_WIDTH{1'b0}};
-            popped_addr       <= {PROG_ADDR_WIDTH{1'b0}};
-
-            jump_addr_reg     <= {PROG_ADDR_WIDTH{1'b0}};
-            jump_wr           <= {PROG_ADDR_WIDTH{1'b0}};
-
-            last_inst         <= 8'h00;
-            exec_count        <= 32'd0;
-
-            zero_ptr          <= {PROG_ADDR_WIDTH{1'b0}};
-
-            state_id          <= S_ZERO_DATA;
+            do_reset();
+            executing <= 1'b1;
+            state_id  <= S_ZERO_DATA;
           end
         end
 
-        S_ZERO_DATA: begin
+        S_ZERO_DATA: begin // todo: think about edge case: does this actually zero out the last cell?
           data_we <= 1'b1;
           dptr <= zero_ptr;
           data_wr <= 8'h00;
           zero_ptr <= zero_ptr + 1;
-          if (zero_ptr == {PROG_ADDR_WIDTH{1'b1}}) begin
+          if (zero_ptr == PROG_LEN) begin
             zero_ptr <= {PROG_ADDR_WIDTH{1'b0}};
             dptr <= {PROG_ADDR_WIDTH{1'b0}};
             state_id <= S_PRE_ADDR;
@@ -406,21 +360,4 @@ module cpu_core #(
     end
   end
 
-endmodule
-
-
-module spram_stupid (
-    input  logic        clk,
-    input  logic        write_enable,
-    input  logic [13:0] addr,
-    input  logic [15:0] data_in,
-    output logic [15:0] data_out
-);
-  spram spram_inst (
-      .clk(clk),
-      .we(write_enable ? 4'b1111 : 4'b0000),
-      .addr(addr),
-      .data_in(data_in),
-      .data_out(data_out)
-  );
 endmodule
