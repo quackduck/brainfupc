@@ -52,14 +52,14 @@ module cpu_core #(
   assign prog_rd = _prog_rd[7:0];  // only lower 8 bits used.
 
   logic [PROG_ADDR_WIDTH-1:0] loader_addr;  // owned by loader
-  logic [                7:0] prog_wr;  // owned by loader
-  logic                       prog_we;  // owned by loader
+  logic [                7:0] loader_wr;  // owned by loader
+  logic                       loader_we;  // owned by loader
 
-  spram program_memory (
+  spram program_memory (  // todo: this stores a 3 bit object in 16 bits...
       .clk(clk),
-      .we(prog_we ? 4'b1111 : 4'b0000),
+      .we(loader_we ? 4'b1111 : 4'b0000),
       .addr(loaded ? iptr : loader_addr),
-      .data_in({8'h00, prog_wr}),
+      .data_in({8'h00, loader_wr}),
       .data_out(_prog_rd)
   );
 
@@ -71,9 +71,9 @@ module cpu_core #(
       .resetn(resetn),
       .load_req(load_req),
 
-      .prog_we(prog_we),
+      .prog_we(loader_we),
       .prog_addr(loader_addr),
-      .prog_wr(prog_wr),
+      .prog_wr(loader_wr),
       .loaded(loaded)
   );
 
