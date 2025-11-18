@@ -1,6 +1,6 @@
 `default_nettype none
 module debounce #(
-    parameter CTR_WIDTH = 16  // number of bits in counter: sets debounce time
+    parameter int CTR_WIDTH = 16  // number of bits in counter: sets debounce time
 ) (
     input  logic clk,
     input  logic noisy,  // raw button signal (active high)

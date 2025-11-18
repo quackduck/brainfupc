@@ -1,7 +1,7 @@
 `default_nettype none
 module cpu_core #(
-    parameter PROG_ADDR_WIDTH = 14,
-    parameter PROG_LEN = 16383
+    parameter int PROG_ADDR_WIDTH = 14,
+    parameter int PROG_LEN = 16383
 ) (
     input logic clk,
 
@@ -43,6 +43,7 @@ module cpu_core #(
 
   } state_t;
 
+  logic [               31:0] exec_count;
 
   logic [PROG_ADDR_WIDTH-1:0] iptr;  // owned by cpu
   logic [                7:0] prog_rd;  // owned by cpu
@@ -77,7 +78,7 @@ module cpu_core #(
   );
 
   // brainfuck data tape
-  logic [PROG_ADDR_WIDTH-1:0] data_addr_reg;
+  logic [PROG_ADDR_WIDTH-1:0] dptr;
   logic [                7:0] data_wr;
   logic                       data_we;
   // logic [               15:0] _data_rd;
@@ -85,13 +86,13 @@ module cpu_core #(
 
   // Dual-port BRAM just for data tape so we can display.
   (* syn_ramstyle = "block_ram" *)
-  logic [                7:0] data_mem      [0:4096-1];
+  logic [                7:0] data_mem[0:4096-1];
 
 
   // Port A: CPU side (read/write) // todo: maybe switch this to save on CPU cycles? we dont care too much about vga.
   always_ff @(posedge clk) begin
-    if (data_we) data_mem[data_addr_reg] <= data_wr;
-    data_rd <= data_mem[data_addr_reg];  // or use separate read addr if you want
+    if (data_we) data_mem[dptr] <= data_wr;
+    data_rd <= data_mem[dptr];  // or use separate read addr if you want
   end
 
   // Port B: VGA read-only
@@ -101,8 +102,8 @@ module cpu_core #(
   assign vga_cell = data_mem[vga_data_addr];
 
   logic [                7:0] current_cell;  // cached data cell
-  logic [PROG_ADDR_WIDTH-1:0] current_ptr;
-  logic [PROG_ADDR_WIDTH-1:0] dptr;
+  // logic [PROG_ADDR_WIDTH-1:0] current_ptr;
+  // logic [PROG_ADDR_WIDTH-1:0] dptr;
   logic [PROG_ADDR_WIDTH-1:0] dptr_next;
 
 
@@ -141,7 +142,6 @@ module cpu_core #(
   );
 
   logic [7:0] last_inst;
-  logic [7:0] exec_count;
   logic [PROG_ADDR_WIDTH-1:0] popped_addr;
 
   logic [PROG_ADDR_WIDTH-1:0] zero_ptr;
@@ -167,11 +167,11 @@ module cpu_core #(
 
       iptr              <= {PROG_ADDR_WIDTH{1'b0}};
 
-      dptr              <= {PROG_ADDR_WIDTH{1'b0}};
+      // dptr              <= {PROG_ADDR_WIDTH{1'b0}};
       dptr_next         <= {PROG_ADDR_WIDTH{1'b0}};
-      data_addr_reg     <= {PROG_ADDR_WIDTH{1'b0}};
+      dptr              <= {PROG_ADDR_WIDTH{1'b0}};
 
-      current_ptr       <= {PROG_ADDR_WIDTH{1'b0}};
+      // current_ptr       <= {PROG_ADDR_WIDTH{1'b0}};
       current_cell      <= 8'h00;
       current_cell_next <= 8'h00;
 
@@ -183,7 +183,7 @@ module cpu_core #(
       jump_wr           <= {PROG_ADDR_WIDTH{1'b0}};
 
       last_inst         <= 8'h00;
-      exec_count        <= 8'h00;
+      exec_count        <= 32'd0;
 
       zero_ptr          <= {PROG_ADDR_WIDTH{1'b0}};
     end else begin
@@ -218,11 +218,11 @@ module cpu_core #(
             // pointers / counters
             iptr              <= {PROG_ADDR_WIDTH{1'b0}};
 
-            dptr              <= {PROG_ADDR_WIDTH{1'b0}};
+            // dptr              <= {PROG_ADDR_WIDTH{1'b0}};
             dptr_next         <= {PROG_ADDR_WIDTH{1'b0}};
-            data_addr_reg     <= {PROG_ADDR_WIDTH{1'b0}};
+            dptr              <= {PROG_ADDR_WIDTH{1'b0}};
 
-            current_ptr       <= {PROG_ADDR_WIDTH{1'b0}};
+            // current_ptr       <= {PROG_ADDR_WIDTH{1'b0}};
             current_cell      <= 8'h00;
             current_cell_next <= 8'h00;
 
@@ -234,7 +234,7 @@ module cpu_core #(
             jump_wr           <= {PROG_ADDR_WIDTH{1'b0}};
 
             last_inst         <= 8'h00;
-            exec_count        <= 8'h00;
+            exec_count        <= 32'd0;
 
             zero_ptr          <= {PROG_ADDR_WIDTH{1'b0}};
 
@@ -244,12 +244,12 @@ module cpu_core #(
 
         S_ZERO_DATA: begin
           data_we <= 1'b1;
-          data_addr_reg <= zero_ptr;
+          dptr <= zero_ptr;
           data_wr <= 8'h00;
           zero_ptr <= zero_ptr + 1;
           if (zero_ptr == {PROG_ADDR_WIDTH{1'b1}}) begin
             zero_ptr <= {PROG_ADDR_WIDTH{1'b0}};
-            data_addr_reg <= {PROG_ADDR_WIDTH{1'b0}};
+            dptr <= {PROG_ADDR_WIDTH{1'b0}};
             state_id <= S_PRE_ADDR;
           end
         end
@@ -314,13 +314,13 @@ module cpu_core #(
         end
 
         S_EXEC_WAIT: begin
-          exec_count <= exec_count + 1;
           current_cell <= current_cell_next;
 
           state_id <= S_EXECUTE;
         end
 
-        S_EXECUTE: begin
+        S_EXECUTE: begin  // can be reached either from EXEC_WAIT or PTR_READ_LATCH
+          exec_count <= exec_count + 1;
           case (prog_rd)
             8'h3E: begin  // '>' - increment data pointer
               dptr_next <= dptr + 1;  // writeback scheduled
@@ -373,17 +373,14 @@ module cpu_core #(
         end
 
         S_PTR_WRITEBACK: begin
-          data_addr_reg <= current_ptr;
-          data_wr       <= current_cell;
-          data_we       <= 1'b1;
-          state_id      <= S_PTR_READ_SETUP;
+          data_wr  <= current_cell;
+          data_we  <= 1'b1;
+          state_id <= S_PTR_READ_SETUP;
         end
 
         S_PTR_READ_SETUP: begin
-          dptr          <= dptr_next;  // move logical pointer
-          current_ptr   <= dptr_next;
-          data_addr_reg <= dptr_next;  // request new address read
-          state_id      <= S_PTR_READ_WAIT;
+          dptr     <= dptr_next;  // request new address read
+          state_id <= S_PTR_READ_WAIT;
         end
 
         S_PTR_READ_WAIT: begin
@@ -391,8 +388,9 @@ module cpu_core #(
         end
 
         S_PTR_READ_LATCH: begin
-          current_cell_next <= data_rd;
-          state_id          <= S_EXEC_WAIT;
+          current_cell_next <= data_rd;  // i think technically not needed..
+          current_cell      <= data_rd;
+          state_id          <= S_EXECUTE;
         end
 
         S_STEP_WAIT: begin  // todo: just merge into exec wait.
