@@ -7,7 +7,8 @@ SRCS = top.v \
        seven_seg_hex.v \
 	   debounce.v \
 	   cpu_core.v \
-	   spram.v
+	   spram.v \
+	   hsync_generator.v
 
 all: $(PROJ).rpt $(PROJ).bin
 

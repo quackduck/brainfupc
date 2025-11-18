@@ -1,6 +1,6 @@
 # 12 MHz clock
-set_io -nowarn CLK        35
-set_frequency CLK 12
+set_io -nowarn clk12        35
+set_frequency clk12 12
 
 # RS232
 set_io -nowarn RX          6
@@ -46,6 +46,29 @@ set_io -nowarn P1B7       42
 set_io -nowarn P1B8       36
 set_io -nowarn P1B9       32
 set_io -nowarn P1B10      28
+
+
+# most of pmod 1a and 1b are used by the vga:
+
+set_io   vga_h_sync             42
+set_io   vga_v_sync             36
+
+set_io r[0]     4
+set_io r[1]     2
+set_io r[2]     47
+set_io r[3]     45
+set_io g[0]     43
+set_io g[1]     38
+set_io g[2]     34
+set_io g[3]     31
+set_io b[0]     3
+set_io b[1]     48
+set_io b[2]     46
+set_io b[3]     44
+
+
+
+
 
 # PMOD 2
 set_io -nowarn P2_1       27

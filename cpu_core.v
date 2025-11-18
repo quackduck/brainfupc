@@ -3,8 +3,12 @@ module cpu_core #(
     parameter PROG_ADDR_WIDTH = 14,
     parameter PROG_LEN = 16383
 ) (
-    input  wire       clk,
+    input wire clk,
     // input  wire [21:0] time_reg,
+
+    input  wire [13:0] vga_data_addr,
+    output wire [ 7:0] vga_cell,
+
     input  wire       resetn,
     input  wire       start_req,
     input  wire       step_req,
@@ -57,16 +61,32 @@ module cpu_core #(
   reg  [PROG_ADDR_WIDTH-1:0] data_addr_reg;
   reg  [                7:0] data_wr;
   reg                        data_we;
-  wire [               15:0] _data_rd;
-  wire [                7:0] data_rd = _data_rd[7:0];  // only lower 8 bits used
+  // wire [               15:0] _data_rd;
+  wire [                7:0] data_rd;
 
-  spram_stupid data_memory (
-      .clk(clk),
-      .write_enable(data_we),
-      .addr(data_addr_reg),
-      .data_in({8'h00, data_wr}),
-      .data_out(_data_rd)
-  );
+  // spram_stupid data_memory (
+  //     .clk(clk),
+  //     .write_enable(data_we),
+  //     .addr(data_addr_reg),
+  //     .data_in({8'h00, data_wr}),
+  //     .data_out(_data_rd)
+  // );
+
+  // Dual-port BRAM just for data tape so we can display.
+  (* syn_ramstyle = "block_ram" *)
+  reg  [                7:0] data_mem      [0:4096];
+
+  // Port A: CPU side (read/write) // todo: maybe switch this to save on CPU cycles? we dont care too much about vga.
+  always @(posedge clk) begin
+    if (data_we) data_mem[data_addr_reg] <= data_wr;
+    data_rd <= data_mem[data_addr_reg];  // or use separate read addr if you want
+  end
+
+  // Port B: VGA read-only
+  // assign vga_cell = data_mem[vga_data_addr];
+  always @(posedge clk) begin
+    vga_cell <= data_mem[vga_data_addr];
+  end
 
   reg  [                7:0] current_cell;  // cached data cell
   reg  [PROG_ADDR_WIDTH-1:0] current_ptr;
