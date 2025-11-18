@@ -8,12 +8,13 @@ SRCS = top.v \
 	   debounce.v \
 	   cpu_core.v \
 	   spram.v \
-	   hsync_generator.v
+	   hsync_generator.v \
+	   loader.sv
 
 all: $(PROJ).rpt $(PROJ).bin
 
 $(PROJ).json: $(SRCS)
-	yosys -ql $(PROJ).yslog -p 'synth_ice40 -top $(PROJ) -json $@; stat' $(SRCS) > $(PROJ)_util.txt
+	yosys -ql $(PROJ).yslog -p 'read_verilog -sv $(SRCS); synth_ice40 -top $(PROJ) -json $@; stat'
 
 $(PROJ).asc: $(PROJ).json icebreaker.pcf
 	nextpnr-ice40 -ql $(PROJ).nplog --up5k --package sg48 --freq 12 \
@@ -28,7 +29,7 @@ $(PROJ).rpt: $(PROJ).asc
 
 # Simulation (testbench)
 $(PROJ)_tb: $(PROJ)_tb.v $(SRCS)
-	iverilog -o $@ $^
+	iverilog -g2012 -o $@ $^
 
 $(PROJ)_tb.vcd: $(PROJ)_tb
 	vvp -N $< +vcd=$@
@@ -38,7 +39,7 @@ $(PROJ)_syn.v: $(PROJ).json
 	yosys -p 'read_json $^; write_verilog $@'
 
 $(PROJ)_syntb: $(PROJ)_tb.v $(PROJ)_syn.v
-	iverilog -o $@ $^ `yosys-config --datdir/ice40/cells_sim.v`
+	iverilog -g2012 -o $@ $^ `yosys-config --datdir/ice40/cells_sim.v`
 
 $(PROJ)_syntb.vcd: $(PROJ)_syntb
 	vvp -N $< +vcd=$@
@@ -47,7 +48,7 @@ $(PROJ)_syntb.vcd: $(PROJ)_syntb
 prog: $(PROJ).bin
 	@echo
 	@echo "=== FPGA Resource Utilization (from yosys synthesis) ==="
-	@yosys -p 'read_verilog $(SRCS); synth_ice40 -top $(PROJ) -json /dev/null; stat' 2>&1 | awk '/=== $(PROJ) ===/,/End of script/' || echo "(no synthesis data)"
+	@yosys -p 'read_verilog -sv $(SRCS); synth_ice40 -top $(PROJ) -json /dev/null; stat' 2>&1 | awk '/=== $(PROJ) ===/,/End of script/' || echo "(no synthesis data)"
 	@echo "--------------------------------------------------------"
 	@echo
 	@echo "=== FPGA Resource Utilization (from nextpnr place/route) ==="

@@ -42,19 +42,34 @@ module cpu_core #(
   localparam S_ZERO_DATA = 5'd21;
   localparam S_PTR_READ_LATCH = 5'd22;
 
-  reg  [PROG_ADDR_WIDTH-1:0] iptr;
-  reg  [                7:0] prog_wr;
-  reg                        prog_we;
+  reg  [PROG_ADDR_WIDTH-1:0] iptr;  // owned by cpu
+  wire [               15:0] _prog_rd;  // owned by cpu
+  wire [                7:0] prog_rd = _prog_rd[7:0];  // only lower 8 bits used.
 
-  wire [               15:0] _prog_rd;
-  wire [                7:0] prog_rd = _prog_rd[7:0];  // only lower 8 bits used
+  reg  [PROG_ADDR_WIDTH-1:0] loader_addr;  // owned by loader
+  reg  [                7:0] prog_wr;  // owned by loader
+  reg                        prog_we;  // owned by loader
 
   spram_stupid program_memory (
       .clk(clk),
       .write_enable(prog_we),
-      .addr(iptr),
+      .addr(loaded ? iptr : loader_addr),
       .data_in({8'h00, prog_wr}),
       .data_out(_prog_rd)
+  );
+
+  loader #(
+      .PROG_ADDR_WIDTH(PROG_ADDR_WIDTH),
+      .PROG_LEN(PROG_LEN)
+  ) loader_inst (
+      .clk(clk),
+      .resetn(resetn),
+      .load_req(load_req),
+
+      .prog_we(prog_we),
+      .prog_addr(loader_addr),
+      .prog_wr(prog_wr),
+      .loaded(loaded)
   );
 
   // brainfuck data tape
@@ -117,17 +132,6 @@ module cpu_core #(
   wire [               15:0] _jump_rd;
   wire [PROG_ADDR_WIDTH-1:0] jump_rd = _jump_rd[PROG_ADDR_WIDTH-1:0];
 
-  // bram_sp #(
-  //     .ADDR_WIDTH(PROG_ADDR_WIDTH),
-  //     .DATA_WIDTH(PROG_ADDR_WIDTH)
-  // ) jump_table (
-  //     .clk(clk),
-  //     .write_enable(jump_we),
-  //     .addr(jump_addr_reg),
-  //     .data_in(jump_wr),
-  //     .data_out(jump_rd)
-  // );
-
   spram_stupid jump_table (
       .clk(clk),
       .write_enable(jump_we),
@@ -149,11 +153,11 @@ module cpu_core #(
   always @(posedge clk or negedge resetn) begin
     if (!resetn) begin
       state_id          <= S_IDLE;
-      loaded            <= 1'b0;
+      // loaded            <= 1'b0;
       executing         <= 1'b0;
       display           <= 8'h00;
 
-      prog_we           <= 1'b0;
+      // prog_we           <= 1'b0;
       data_we           <= 1'b0;
       stack_we          <= 1'b0;
       jump_we           <= 1'b0;
@@ -181,7 +185,7 @@ module cpu_core #(
       zero_ptr          <= {PROG_ADDR_WIDTH{1'b0}};
     end else begin
       // these get overriden as needed.
-      prog_we  <= 1'b0;
+      // prog_we  <= 1'b0;
       data_we  <= 1'b0;
       stack_we <= 1'b0;
       jump_we  <= 1'b0;
@@ -190,9 +194,9 @@ module cpu_core #(
         S_IDLE: begin
           executing <= 1'b0;
           if (load_req) begin
-            loaded <= 1'b0;
-            iptr <= {PROG_ADDR_WIDTH{1'b0}};
-            state_id <= S_LOAD;
+            // loaded <= 1'b0;
+            // iptr <= {PROG_ADDR_WIDTH{1'b0}};
+            // state_id <= S_LOAD;
           end else if (start_req && loaded) begin
             executing         <= 1'b1;
             // iptr <= {PROG_ADDR_WIDTH{1'b0}};
@@ -254,28 +258,33 @@ module cpu_core #(
           end
         end
 
-        S_LOAD: begin
-          prog_we <= 1'b1;
+        // S_LOAD: begin
+        //   // prog_we <= 1'b1;
 
-          // // program: +[+.]
-          // case (iptr)
-          //   0: prog_wr <= 8'h2B;  // +
-          //   1: prog_wr <= 8'h5B;  // [
-          //   2: prog_wr <= 8'h2B;  // +
-          //   3: prog_wr <= 8'h2E;  // .
-          //   4: prog_wr <= 8'h5D;  // ]
-          //   default: prog_wr <= 8'h00;
-          // endcase
-          `include "prog_rom.v"  // generated case stmt
+        //   // // // program: +[+.]
+        //   // // case (iptr)
+        //   // //   0: prog_wr <= 8'h2B;  // +
+        //   // //   1: prog_wr <= 8'h5B;  // [
+        //   // //   2: prog_wr <= 8'h2B;  // +
+        //   // //   3: prog_wr <= 8'h2E;  // .
+        //   // //   4: prog_wr <= 8'h5D;  // ]
+        //   // //   default: prog_wr <= 8'h00;
+        //   // // endcase
+        //   // `include "prog_rom.v"  // generated case stmt
 
-          if (iptr == PROG_LEN) begin
-            iptr <= {PROG_ADDR_WIDTH{1'b0}};
-            loaded <= 1'b1;
-            state_id <= S_IDLE;
-          end else begin
-            iptr <= iptr + 1;
-          end
-        end
+        //   // if (iptr == PROG_LEN) begin
+        //   //   iptr <= {PROG_ADDR_WIDTH{1'b0}};
+        //   //   loaded <= 1'b1;
+        //   //   state_id <= S_IDLE;
+        //   // end else begin
+        //   //   iptr <= iptr + 1;
+        //   // end
+
+        //   // things used: prog_we, prog_wr, iptr, loaded
+        //   // start signal, done signal?
+
+
+        // end
 
 
         S_PRE_ADDR: begin
