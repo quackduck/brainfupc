@@ -1,7 +1,7 @@
 module seven_seg_ctrl (
     input CLK,
     input [7:0] din,
-    output reg [7:0] dout
+    output logic [7:0] dout
 );
   wire [6:0] lsb_digit;
   wire [6:0] msb_digit;
@@ -16,9 +16,9 @@ module seven_seg_ctrl (
       .dout(lsb_digit)
   );
 
-  reg [9:0] clkdiv = 0;
-  reg clkdiv_pulse = 0;
-  reg msb_not_lsb = 0;
+  logic [9:0] clkdiv = 0;
+  logic clkdiv_pulse = 0;
+  logic msb_not_lsb = 0;
 
   always @(posedge CLK) begin
     clkdiv <= clkdiv + 1;

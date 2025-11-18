@@ -14,9 +14,9 @@ module top (
 
     output vga_h_sync,
     output vga_v_sync,
-    output reg [3:0] r,
-    output reg [3:0] g,
-    output reg [3:0] b
+    output logic [3:0] r,
+    output logic [3:0] g,
+    output logic [3:0] b
 
     // output P1A1,
     // P1A2,
@@ -74,7 +74,7 @@ module top (
   wire [7:0] display_value;
   wire executing;
 
-  reg [21:0] slow_clk = 0;
+  logic [21:0] slow_clk = 0;
 
   always @(posedge clk_pixel) begin
     slow_clk <= slow_clk + 1;
@@ -83,7 +83,7 @@ module top (
   // integer slowdown = 0;
 
   // edge detectors -> single-cycle pulses
-  reg db_btn1_last = 0, db_btn2_last = 0, db_btn3_last = 0;
+  logic db_btn1_last = 0, db_btn2_last = 0, db_btn3_last = 0;
   wire btn1_pulse = db_btn1 & ~db_btn1_last;
   wire btn2_pulse = db_btn2 & ~db_btn2_last;
   wire btn3_pulse = db_btn3 & ~db_btn3_last;
@@ -102,8 +102,8 @@ module top (
   wire resetn = BTN_N;  // BTN_N active low, treat as active-high resetn
 
 
-  reg [13:0] vga_data_addr;
-  reg [7:0] vga_cell;
+  logic [13:0] vga_data_addr;
+  logic [7:0] vga_cell;
 
   cpu_core core (
       .clk          (clk_pixel),

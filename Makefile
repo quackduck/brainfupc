@@ -1,14 +1,14 @@
 PROJ = top
 
 # List all Verilog source files here
-SRCS = top.v \
-	   bram_sp.v \
-       seven_seg_ctrl.v \
-       seven_seg_hex.v \
-	   debounce.v \
-	   cpu_core.v \
-	   spram.v \
-	   hsync_generator.v \
+SRCS = top.sv \
+	   bram_sp.sv \
+       seven_seg_ctrl.sv \
+       seven_seg_hex.sv \
+	   debounce.sv \
+	   cpu_core.sv \
+	   spram.sv \
+	   hsync_generator.sv \
 	   loader.sv
 
 all: $(PROJ).rpt $(PROJ).bin
@@ -67,6 +67,7 @@ clean:
 	rm -f $(PROJ).yslog $(PROJ).nplog $(PROJ).json $(PROJ).asc $(PROJ).rpt $(PROJ).bin
 	rm -f $(PROJ)_tb $(PROJ)_tb.vcd $(PROJ)_syn.v $(PROJ)_syntb $(PROJ)_syntb.vcd
 	rm -f $(PROJ)_util.txt $(PROJ)_pnr.rpt
+	rm -f simv tb_top.vcd .DS_Store
 
 .SECONDARY:
 .PHONY: all prog clean

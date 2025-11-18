@@ -1,11 +1,11 @@
 module hvsync_generator (
     input wire clk,  // 25.175 MHz pixel clock
 
-    output reg       vga_h_sync,
-    output reg       vga_v_sync,
-    output reg       inDisplayArea,
-    output reg [9:0] CounterX,
-    output reg [9:0] CounterY        // Changed to 10 bits for consistency
+    output logic       vga_h_sync,
+    output logic       vga_v_sync,
+    output logic       inDisplayArea,
+    output logic [9:0] CounterX,
+    output logic [9:0] CounterY        // Changed to 10 bits for consistency
 );
 
   // VGA 640x480 @ 60Hz timing parameters
@@ -30,8 +30,8 @@ module hvsync_generator (
   localparam V_SYNC_END = V_SYNC_START + V_SYNC;  // 492
 
   //////////////////////////////////////////////////
-  //   reg [9:0] CounterX;
-  //   reg [9:0] CounterY;
+  //   logic [9:0] CounterX;
+  //   logic [9:0] CounterY;
 
   // Counter logic - symmetric for both X and Y
   wire CounterXmaxed = (CounterX == H_TOTAL - 1);
@@ -50,7 +50,7 @@ module hvsync_generator (
   end
 
   // Sync pulse generation - symmetric structure
-  reg vga_HS, vga_VS;
+  logic vga_HS, vga_VS;
 
   always @(posedge clk) begin
     vga_HS <= (CounterX >= H_SYNC_START) && (CounterX < H_SYNC_END);
@@ -58,7 +58,7 @@ module hvsync_generator (
   end
 
   // Display area - when we're in visible region
-  //   reg inDisplayArea;
+  //   logic inDisplayArea;
   always @(posedge clk) begin
     inDisplayArea <= (CounterX < H_VISIBLE) && (CounterY < V_VISIBLE);
   end

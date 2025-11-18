@@ -3,52 +3,56 @@ module cpu_core #(
     parameter PROG_ADDR_WIDTH = 14,
     parameter PROG_LEN = 16383
 ) (
-    input wire clk,
-    // input  wire [21:0] time_reg,
+    input logic clk,
 
-    input  wire [13:0] vga_data_addr,
-    output wire [ 7:0] vga_cell,
+    input  logic [13:0] vga_data_addr,
+    output logic [ 7:0] vga_cell,
 
-    input  wire       resetn,
-    input  wire       start_req,
-    input  wire       step_req,
-    input  wire       load_req,
-    output reg        loaded,
-    output reg        executing,
-    output reg  [4:0] state_id,
-    output reg  [7:0] display
+    input logic resetn,
+    input logic start_req,
+    input logic step_req,
+    input logic load_req,
+
+    output logic       loaded,
+    output logic       executing,
+    output logic [4:0] state_id,
+    output logic [7:0] display
 );
+  typedef enum logic [4:0] {
+    S_IDLE,
 
-  localparam S_IDLE = 5'd0;
-  localparam S_LOAD = 5'd1;
+    // preprocess states
+    S_PRE_ADDR,
+    S_PRE_READ,
+    S_PRE_STACK_WAIT,
+    S_PRE_STACK_READ,
+    S_PRE_JUMP_W1,
+    S_PRE_JUMP_DONE,
 
-  // preprocess states
-  localparam S_PRE_ADDR = 5'd2;
-  localparam S_PRE_READ = 5'd4;
-  localparam S_PRE_STACK_WAIT = 5'd5;
-  localparam S_PRE_STACK_READ = 5'd6;
-  localparam S_PRE_JUMP_W1 = 5'd7;
-  localparam S_PRE_JUMP_DONE = 5'd9;
+    // running
+    S_EXEC_WAIT,
+    S_EXECUTE,
 
-  // running
-  localparam S_EXEC_WAIT = 5'd10;
-  localparam S_EXECUTE = 5'd12;
+    // writeback
+    S_PTR_WRITEBACK,
+    S_STEP_WAIT,
+    S_PTR_READ_SETUP,
+    S_PTR_READ_WAIT,
+    S_ZERO_DATA,
+    S_PTR_READ_LATCH
 
-  // writeback states
-  localparam S_PTR_WRITEBACK = 5'd14;
-  localparam S_STEP_WAIT = 5'd17;
-  localparam S_PTR_READ_SETUP = 5'd19;
-  localparam S_PTR_READ_WAIT = 5'd20;
-  localparam S_ZERO_DATA = 5'd21;
-  localparam S_PTR_READ_LATCH = 5'd22;
+  } state_t;
 
-  reg  [PROG_ADDR_WIDTH-1:0] iptr;  // owned by cpu
-  wire [               15:0] _prog_rd;  // owned by cpu
-  wire [                7:0] prog_rd = _prog_rd[7:0];  // only lower 8 bits used.
 
-  reg  [PROG_ADDR_WIDTH-1:0] loader_addr;  // owned by loader
-  reg  [                7:0] prog_wr;  // owned by loader
-  reg                        prog_we;  // owned by loader
+  logic [PROG_ADDR_WIDTH-1:0] iptr;  // owned by cpu
+  logic [                7:0] prog_rd;  // owned by cpu
+
+  logic [               15:0] _prog_rd;
+  assign prog_rd = _prog_rd[7:0];  // only lower 8 bits used.
+
+  logic [PROG_ADDR_WIDTH-1:0] loader_addr;  // owned by loader
+  logic [                7:0] prog_wr;  // owned by loader
+  logic                       prog_we;  // owned by loader
 
   spram_stupid program_memory (
       .clk(clk),
@@ -73,49 +77,43 @@ module cpu_core #(
   );
 
   // brainfuck data tape
-  reg  [PROG_ADDR_WIDTH-1:0] data_addr_reg;
-  reg  [                7:0] data_wr;
-  reg                        data_we;
-  // wire [               15:0] _data_rd;
-  wire [                7:0] data_rd;
-
-  // spram_stupid data_memory (
-  //     .clk(clk),
-  //     .write_enable(data_we),
-  //     .addr(data_addr_reg),
-  //     .data_in({8'h00, data_wr}),
-  //     .data_out(_data_rd)
-  // );
+  logic [PROG_ADDR_WIDTH-1:0] data_addr_reg;
+  logic [                7:0] data_wr;
+  logic                       data_we;
+  // logic [               15:0] _data_rd;
+  logic [                7:0] data_rd;
 
   // Dual-port BRAM just for data tape so we can display.
   (* syn_ramstyle = "block_ram" *)
-  reg  [                7:0] data_mem      [0:4096];
+  logic [                7:0] data_mem      [0:4096-1];
+
 
   // Port A: CPU side (read/write) // todo: maybe switch this to save on CPU cycles? we dont care too much about vga.
-  always @(posedge clk) begin
+  always_ff @(posedge clk) begin
     if (data_we) data_mem[data_addr_reg] <= data_wr;
     data_rd <= data_mem[data_addr_reg];  // or use separate read addr if you want
   end
 
   // Port B: VGA read-only
-  // assign vga_cell = data_mem[vga_data_addr];
-  always @(posedge clk) begin
-    vga_cell <= data_mem[vga_data_addr];
-  end
+  logic [7:0] vga_cell_reg;
+  // always_ff @(posedge clk) vga_cell <= data_mem[vga_data_addr];
+  // assign vga_cell = vga_cell_reg;
+  assign vga_cell = data_mem[vga_data_addr];
 
-  reg  [                7:0] current_cell;  // cached data cell
-  reg  [PROG_ADDR_WIDTH-1:0] current_ptr;
-  reg  [PROG_ADDR_WIDTH-1:0] dptr;
-  reg  [PROG_ADDR_WIDTH-1:0] dptr_next;
+  logic [                7:0] current_cell;  // cached data cell
+  logic [PROG_ADDR_WIDTH-1:0] current_ptr;
+  logic [PROG_ADDR_WIDTH-1:0] dptr;
+  logic [PROG_ADDR_WIDTH-1:0] dptr_next;
 
 
   // bracket stack, stores addresses of [ to match up with ]. we could save half the memory by noticing that the stack can never store more than (prog_len/2) addresses
-  reg  [PROG_ADDR_WIDTH-1:0] stack_addr_reg;
-  reg  [PROG_ADDR_WIDTH-1:0] stack_wr;
-  reg                        stack_we;
-  wire [               15:0] _stack_rd;
-  wire [PROG_ADDR_WIDTH-1:0] stack_rd = _stack_rd[PROG_ADDR_WIDTH-1:0];
-  reg  [PROG_ADDR_WIDTH-1:0] stack_ptr;  // at most half the program is [
+  logic [PROG_ADDR_WIDTH-1:0] stack_wr;
+  logic                       stack_we;
+  logic [               15:0] _stack_rd;
+  logic [PROG_ADDR_WIDTH-1:0] stack_rd;
+  assign stack_rd = _stack_rd[PROG_ADDR_WIDTH-1:0];
+
+  logic [PROG_ADDR_WIDTH-1:0] stack_ptr;  // at most half the program is [
 
   spram_stupid bracket_stack (
       .clk(clk),
@@ -126,11 +124,13 @@ module cpu_core #(
   );
 
   // jump table stores address of matching bracket for each bracket.
-  reg  [PROG_ADDR_WIDTH-1:0] jump_addr_reg;
-  reg  [PROG_ADDR_WIDTH-1:0] jump_wr;
-  reg                        jump_we;
-  wire [               15:0] _jump_rd;
-  wire [PROG_ADDR_WIDTH-1:0] jump_rd = _jump_rd[PROG_ADDR_WIDTH-1:0];
+  logic [PROG_ADDR_WIDTH-1:0] jump_addr_reg;
+  logic [PROG_ADDR_WIDTH-1:0] jump_wr;
+  logic                       jump_we;
+  logic [PROG_ADDR_WIDTH-1:0] jump_rd;
+
+  logic [               15:0] _jump_rd;
+  assign jump_rd = _jump_rd[PROG_ADDR_WIDTH-1:0];
 
   spram_stupid jump_table (
       .clk(clk),
@@ -140,20 +140,23 @@ module cpu_core #(
       .data_out(_jump_rd)  // only lower PROG_ADDR_WIDTH bits used
   );
 
-  reg [7:0] last_inst;
-  reg [7:0] exec_count;
-  reg [PROG_ADDR_WIDTH-1:0] popped_addr;
+  logic [7:0] last_inst;
+  logic [7:0] exec_count;
+  logic [PROG_ADDR_WIDTH-1:0] popped_addr;
 
-  reg [PROG_ADDR_WIDTH-1:0] zero_ptr;
-  reg [7:0] current_cell_next;
+  logic [PROG_ADDR_WIDTH-1:0] zero_ptr;
+  logic [7:0] current_cell_next;
 
-  reg use_jump_rd;
+  // todo: edge case where we jump past program??
+  logic use_jump_rd;
+  always_comb begin : jump_logic
+    use_jump_rd = (prog_rd == 8'h5B && current_cell == 8'h00) ||
+                      (prog_rd == 8'h5D && current_cell != 8'h00);
+  end
 
-  integer i;
-  always @(posedge clk or negedge resetn) begin
+  always_ff @(posedge clk or negedge resetn) begin : cpu_fsm
     if (!resetn) begin
       state_id          <= S_IDLE;
-      // loaded            <= 1'b0;
       executing         <= 1'b0;
       display           <= 8'h00;
 
@@ -193,11 +196,7 @@ module cpu_core #(
       case (state_id)
         S_IDLE: begin
           executing <= 1'b0;
-          if (load_req) begin
-            // loaded <= 1'b0;
-            // iptr <= {PROG_ADDR_WIDTH{1'b0}};
-            // state_id <= S_LOAD;
-          end else if (start_req && loaded) begin
+          if (start_req && loaded) begin
             executing         <= 1'b1;
             // iptr <= {PROG_ADDR_WIDTH{1'b0}};
             // // prog_addr_reg <= {PROG_ADDR_WIDTH{1'b0}};
@@ -213,9 +212,6 @@ module cpu_core #(
             // jump_addr_reg <= {PROG_ADDR_WIDTH{1'b0}};
             // popped_addr <= {PROG_ADDR_WIDTH{1'b0}};
 
-
-
-            // loaded            <= 1'b0;
             executing         <= 1'b0;
             display           <= 8'h00;
 
@@ -257,34 +253,6 @@ module cpu_core #(
             state_id <= S_PRE_ADDR;
           end
         end
-
-        // S_LOAD: begin
-        //   // prog_we <= 1'b1;
-
-        //   // // // program: +[+.]
-        //   // // case (iptr)
-        //   // //   0: prog_wr <= 8'h2B;  // +
-        //   // //   1: prog_wr <= 8'h5B;  // [
-        //   // //   2: prog_wr <= 8'h2B;  // +
-        //   // //   3: prog_wr <= 8'h2E;  // .
-        //   // //   4: prog_wr <= 8'h5D;  // ]
-        //   // //   default: prog_wr <= 8'h00;
-        //   // // endcase
-        //   // `include "prog_rom.v"  // generated case stmt
-
-        //   // if (iptr == PROG_LEN) begin
-        //   //   iptr <= {PROG_ADDR_WIDTH{1'b0}};
-        //   //   loaded <= 1'b1;
-        //   //   state_id <= S_IDLE;
-        //   // end else begin
-        //   //   iptr <= iptr + 1;
-        //   // end
-
-        //   // things used: prog_we, prog_wr, iptr, loaded
-        //   // start signal, done signal?
-
-
-        // end
 
 
         S_PRE_ADDR: begin
@@ -355,11 +323,11 @@ module cpu_core #(
         S_EXECUTE: begin
           case (prog_rd)
             8'h3E: begin  // '>' - increment data pointer
-              dptr_next <= dptr + 1;
+              dptr_next <= dptr + 1;  // writeback scheduled
             end
 
             8'h3C: begin  // '<' - decrement data pointer
-              dptr_next <= dptr - 1;
+              dptr_next <= dptr - 1;  // writeback scheduled
             end
 
             8'h2B: begin  // '+'
@@ -377,7 +345,7 @@ module cpu_core #(
             8'h2C: begin  // ',' (input not implemented)
             end
 
-            // jumping now implemented by use_jump_rd wire.
+            // jumping now implemented by use_jump_rd logic.
             8'h5B: begin  // '['
             end
             8'h5D: begin  // ']'
@@ -391,11 +359,11 @@ module cpu_core #(
           last_inst <= prog_rd;
 
           if (iptr < PROG_LEN) begin
-            // todo: edge case where we jump past program??
-            use_jump_rd = ((prog_rd == 8'h5B && current_cell == 8'h00) || (prog_rd == 8'h5D && current_cell != 8'h00));
             iptr <= use_jump_rd ? jump_rd + 1 : iptr + 1;
             jump_addr_reg <= use_jump_rd ? jump_rd + 1 : iptr + 1;
-            state_id <= (prog_rd == 8'h3E || prog_rd == 8'h3C) ? S_PTR_WRITEBACK : S_EXEC_WAIT; // todo: skip write and go to read if cell value not changed.
+
+            // todo: skip write and go to read if cell value not changed.
+            state_id <= (prog_rd == 8'h3E || prog_rd == 8'h3C) ? S_PTR_WRITEBACK : S_EXEC_WAIT;
             // state_id      <= (prog_rd == 8'h3E || prog_rd == 8'h3C) ? S_PTR_WRITEBACK : S_STEP_WAIT;
           end else begin
             // reached end: stop executing
@@ -444,11 +412,11 @@ endmodule
 
 
 module spram_stupid (
-    input  wire        clk,
-    input  wire        write_enable,
-    input  wire [13:0] addr,
-    input  wire [15:0] data_in,
-    output reg  [15:0] data_out
+    input  logic        clk,
+    input  logic        write_enable,
+    input  logic [13:0] addr,
+    input  logic [15:0] data_in,
+    output logic [15:0] data_out
 );
   spram spram_inst (
       .clk(clk),

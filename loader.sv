@@ -1,23 +1,26 @@
 `default_nettype none
 
 module loader #(
-    parameter PROG_ADDR_WIDTH,
-    parameter PROG_LEN
+    parameter integer PROG_ADDR_WIDTH,
+    parameter integer PROG_LEN
 ) (
     input wire clk,
     input wire resetn,
     input wire load_req,
 
-    output reg                       prog_we,
-    output reg [PROG_ADDR_WIDTH-1:0] prog_addr,
-    output reg [                7:0] prog_wr,
-    output reg                       loaded
+    output logic                       prog_we,
+    output logic [PROG_ADDR_WIDTH-1:0] prog_addr,
+    output logic [                7:0] prog_wr,
+    output logic                       loaded
 );
-  localparam IDLE = 2'b00;
-  localparam LOADING = 2'b01;
-  localparam DONE = 2'b10;
 
-  reg [1:0] state;
+  typedef enum logic [1:0] {
+    IDLE    = 2'b00,
+    LOADING = 2'b01,
+    DONE    = 2'b10
+  } state_t;
+
+  logic [1:0] state;
 
   always @(posedge clk or negedge resetn) begin
     if (!resetn) begin
@@ -41,7 +44,7 @@ module loader #(
         LOADING: begin
           prog_we <= 1'b1;
 
-          `include "prog_rom.v"
+          `include "prog_rom.sv"
 
           if (prog_addr == PROG_LEN) begin
             state   <= DONE;

@@ -4,7 +4,7 @@ module debounce #(
 ) (
     input clk,
     input noisy,  // raw button signal (active high)
-    output reg clean  // stable debounced output
+    output logic clean  // stable debounced output
 );
 
   // // for sim, just pass through
@@ -12,8 +12,8 @@ module debounce #(
   //   clean <= noisy;
   // end
 
-  reg [CTR_WIDTH-1:0] counter = 0;
-  reg sync_0 = 0, sync_1 = 0;
+  logic [CTR_WIDTH-1:0] counter = 0;
+  logic sync_0 = 0, sync_1 = 0;
 
   // 2-FF synchronizer to avoid metastability
   always @(posedge clk) begin

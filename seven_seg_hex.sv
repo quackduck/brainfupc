@@ -1,6 +1,6 @@
 module seven_seg_hex (
     input [3:0] din,
-    output reg [6:0] dout
+    output logic [6:0] dout
 );
   always @*
     case (din)

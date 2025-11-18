@@ -2,14 +2,14 @@
 
 module tb_top;
   // Clock and reset
-  reg CLK = 0;
+  logic CLK = 0;
   always #5 CLK = ~CLK;  // 100 MHz clock -> period 10ns
 
   // Buttons / reset
-  reg BTN_N = 0;  // active-low reset
-  reg BTN1 = 0;
-  reg BTN2 = 0;
-  reg BTN3 = 0;
+  logic BTN_N = 0;  // active-low reset
+  logic BTN1 = 0;
+  logic BTN2 = 0;
+  logic BTN3 = 0;
 
   // Observables
   wire LED1, LED2, LED3, LED4, LED5;
