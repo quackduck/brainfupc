@@ -2,9 +2,9 @@
 module debounce #(
     parameter CTR_WIDTH = 16  // number of bits in counter: sets debounce time
 ) (
-    input clk,
-    input noisy,  // raw button signal (active high)
-    output logic clean  // stable debounced output
+    input  logic clk,
+    input  logic noisy,  // raw button signal (active high)
+    output logic clean   // stable debounced output
 );
 
   // // for sim, just pass through

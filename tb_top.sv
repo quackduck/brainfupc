@@ -12,8 +12,8 @@ module tb_top;
   logic BTN3 = 0;
 
   // Observables
-  wire LED1, LED2, LED3, LED4, LED5;
-  wire P1A1, P1A2, P1A3, P1A4, P1A7, P1A8, P1A9, P1A10;
+  logic LED1, LED2, LED3, LED4, LED5;
+  logic P1A1, P1A2, P1A3, P1A4, P1A7, P1A8, P1A9, P1A10;
 
   // Instantiate DUT (named port mapping)
   top uut (

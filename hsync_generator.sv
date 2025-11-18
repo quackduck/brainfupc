@@ -1,5 +1,5 @@
 module hvsync_generator (
-    input wire clk,  // 25.175 MHz pixel clock
+    input logic clk,  // 25.175 MHz pixel clock
 
     output logic       vga_h_sync,
     output logic       vga_v_sync,
@@ -34,8 +34,8 @@ module hvsync_generator (
   //   logic [9:0] CounterY;
 
   // Counter logic - symmetric for both X and Y
-  wire CounterXmaxed = (CounterX == H_TOTAL - 1);
-  wire CounterYmaxed = (CounterY == V_TOTAL - 1);
+  logic CounterXmaxed = (CounterX == H_TOTAL - 1);
+  logic CounterYmaxed = (CounterY == V_TOTAL - 1);
 
   always @(posedge clk) begin
     if (CounterXmaxed) CounterX <= 0;

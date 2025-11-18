@@ -3,8 +3,8 @@ module seven_seg_ctrl (
     input [7:0] din,
     output logic [7:0] dout
 );
-  wire [6:0] lsb_digit;
-  wire [6:0] msb_digit;
+  logic [6:0] lsb_digit;
+  logic [6:0] msb_digit;
 
   seven_seg_hex msb_nibble (
       .din (din[7:4]),

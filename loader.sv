@@ -4,9 +4,9 @@ module loader #(
     parameter integer PROG_ADDR_WIDTH,
     parameter integer PROG_LEN
 ) (
-    input wire clk,
-    input wire resetn,
-    input wire load_req,
+    input logic clk,
+    input logic resetn,
+    input logic load_req,
 
     output logic                       prog_we,
     output logic [PROG_ADDR_WIDTH-1:0] prog_addr,
