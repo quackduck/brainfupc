@@ -102,23 +102,24 @@ module top (
   wire resetn = BTN_N;  // BTN_N active low, treat as active-high resetn
 
 
-  logic [13:0] vga_data_addr;
+  logic [14:0] vga_data_addr;
   logic [7:0] vga_cell;
 
   cpu_core core (
-      .clk          (clk_pixel),
-      .vga_data_addr(vga_data_addr),
-      .vga_cell     (vga_cell),
+      .clk            (clk_pixel),
+      .vga_data_addr  (vga_data_addr),
+      .vga_cell       (vga_cell),
+      .in_display_area(inDisplayArea),
       //   .time_reg (slow_clk),
       // .clk      (slow_clk[slowdown]),  // slow clock for visibility
-      .resetn       (resetn),
-      .start_req    (btn1_pulse),
-      .step_req     (btn2_pulse),
-      .load_req     (btn3_pulse),
-      .loaded       (loaded),
-      .executing    (executing),
-      .state_id     (state_id),
-      .display      (display_value)
+      .resetn         (resetn),
+      .start_req      (btn1_pulse),
+      .step_req       (btn2_pulse),
+      .load_req       (btn3_pulse),
+      .loaded         (loaded),
+      .executing      (executing),
+      .state_id       (state_id),
+      .display        (display_value)
   );
 
   // status leds
@@ -150,7 +151,9 @@ module top (
   );
 
   always @(posedge clk_pixel) begin
-    vga_data_addr <= {CounterY[9:3], CounterX[9:3]};  // uhhh idk
+    // vga_data_addr <= {CounterY[9:3], CounterX[9:3]};  // uhhh idk
+    // addr <= y' * 80 + x' // 80 = 640 / 2^3 (3 bits chopped off.)
+    vga_data_addr <= 14'(CounterY[9:3] * 80) + 14'(CounterX[9:3]);
   end
 
   always @(posedge clk_pixel) begin
@@ -169,9 +172,17 @@ module top (
       //   g <= CounterY[5:2];
       //   b <= CounterX[8:5];
 
-      r <= vga_cell[7:4];
-      g <= vga_cell[3:0];
-      b <= 4'b0000;
+      // r <= vga_cell[7:4];
+      // g <= vga_cell[3:0];
+      // b <= 4'b0000;
+
+      // b gets top 2, g gets next three, r gets next three.
+
+      b <= {vga_cell[7:6], vga_cell[7:6]};
+      g <= {vga_cell[5:3], vga_cell[3:3]};
+      r <= {vga_cell[2:0], vga_cell[0:0]};
+
+      // the colder a color is, the higher its value.
 
     end else begin
       r <= 4'b0000;

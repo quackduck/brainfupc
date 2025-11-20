@@ -44,6 +44,8 @@ module loader #(
         LOADING: begin
           prog_we <= 1'b1;
 
+          // possibly use bram here with initial file. copy into sram? or maybe just store prog in bram?
+
           `include "prog_rom.sv"
 
           if (prog_addr == PROG_LEN) begin

@@ -1,0 +1,9 @@
+https://fpga.michelanders.nl/ - mentions that you can write two addrs in two cycles and immediately read the corresponding two values in the next two cycles.
+maybe we can fetch next inst within exec_wait and use it if no jmp.... 1 cycle per inst for most insts..
+
+
+PSRAM IS SUPER ANNOYING. this data sheet is helpful: https://tomverbeure.github.io/assets/icev/LY68L6400-0.4.pdf. managed to get it to show manufacturer id. probably just too slow.
+might be easier to just use spram and manage the logic between vga using it and the cpu using it.
+
+
+for using spram with one rw port for both vga and 
