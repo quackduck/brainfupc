@@ -3,14 +3,10 @@ module top (
     // input  CLK,
     input  clk12,
     input  BTN_N,  // reset (active low)
-    input  BTN1,   // run/once
-    // input  BTN2,   // debug change
+    input  BTN1,   // run
     input  BTN3,   // load program
     output LED1,
-    // output LED2,
-    // output LED3,
     output LED4,
-    // output LED5,
 
     output vga_h_sync,
     output vga_v_sync,
@@ -76,7 +72,7 @@ module top (
   );
 
   wire loaded;
-  wire [4:0] state_id;
+  // wire [4:0] state_id;
   // wire [7:0] display_value;
   wire executing;
 
@@ -116,21 +112,19 @@ module top (
       .vga_data_addr  (vga_data_addr),
       .vga_cell       (vga_cell),
       .in_display_area(inDisplayArea),
-      //   .time_reg (slow_clk),
-      // .clk      (slow_clk[slowdown]),  // slow clock for visibility
       .resetn         (resetn),
       .start_req      (btn1_pulse),
       .step_req       (0),
-      .load_req       (btn3_pulse),
+      .fast_req       (db_btn3),        // hold to skip waiting for tx
+      // .load_req       (btn3_pulse),
       .loaded         (loaded),
       .executing      (executing),
-      .state_id       (state_id),
-      // .display        (display_value),
+      // .state_id       (state_id),
 
       .txd(txd),
-      .rxd(rxd),
-      .LED_GRN_N(LED_GRN_N),
-      .LED_RED_N(LED_RED_N)
+      .rxd(rxd)
+      // .LED_GRN_N(LED_GRN_N),
+      // .LED_RED_N(LED_RED_N)
   );
 
   // status leds

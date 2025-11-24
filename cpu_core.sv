@@ -11,20 +11,19 @@ module cpu_core #(
     input logic resetn,
     input logic start_req,
     input logic step_req,
-    input logic load_req,
+    input logic fast_req,   // skip waiting for serial tx
+    // input logic load_req,
 
     input logic in_display_area,
 
-    output logic       loaded,
-    output logic       executing,
-    output logic [4:0] state_id,
-    // output logic [7:0] display,
+    output logic loaded,
+    output logic executing,
 
     input  logic rxd,
-    output logic txd,
+    output logic txd
 
-    output logic LED_GRN_N,
-    output logic LED_RED_N
+    // output logic LED_GRN_N,
+    // output logic LED_RED_N
 );
   typedef enum logic [4:0] {
     S_IDLE,
@@ -44,6 +43,8 @@ module cpu_core #(
     S_EXECUTE,
 
     S_TX_OUT,
+    S_RX_IN,
+    S_RX_WAIT,
 
     // writeback
     S_PTR_WRITEBACK,
@@ -53,20 +54,44 @@ module cpu_core #(
     S_PTR_READ_LATCH
 
   } state_t;
+  logic [4:0] state_id;
 
 
   logic tx_start;
-
-
   logic tx_busy;
+  logic [7:0] tx_data;
+  assign tx_data = current_cell;
 
-  transmitter tx_inst (
+  // localparam integer BAUD = 9600;
+  localparam integer BAUD = 1_500_000;  // exactly 17 clock cycles.
+  localparam integer CLOCK_FREQ = 25_500_000;
+
+  transmitter #(
+      .BAUD(BAUD),
+      .CLOCK_FREQ(CLOCK_FREQ)
+  ) tx_inst (
       .clk(clk),
       .rst_n(resetn),
       .start(tx_start),
       .busy(tx_busy),
-      .data_in(current_cell),
+      .data_in(tx_data),
       .txd(txd)
+  );
+
+  logic rx_start;
+  logic rx_busy;
+  logic [7:0] rx_data;
+
+  receiver #(
+      .BAUD(BAUD),
+      .CLOCK_FREQ(CLOCK_FREQ)
+  ) rx_inst (
+      .clk(clk),
+      .rst_n(resetn),
+      .start(rx_start),
+      .busy(rx_busy),
+      .data_out(rx_data),
+      .rxd(rxd)
   );
 
   logic [               31:0] exec_count;
@@ -95,7 +120,7 @@ module cpu_core #(
   ) loader_inst (
       .clk(clk),
       .resetn(resetn),
-      .load_req(load_req),
+      .load_req(1'b1),  // always load.
 
       .prog_we(loader_we),
       .prog_addr(loader_addr),
@@ -213,6 +238,7 @@ module cpu_core #(
     cpu_priority  <= '0;
     executing     <= '0;
     tx_start      <= '0;
+    rx_start      <= '0;
 
     data_we       <= '0;
     stack_we      <= '0;
@@ -236,7 +262,7 @@ module cpu_core #(
     zero_ptr      <= '0;
   endtask
 
-  always_ff @(posedge clk or negedge resetn) begin : cpu_fsm
+  always @(posedge clk or negedge resetn) begin : cpu_fsm
     if (!resetn) begin
       do_reset();
       state_id <= S_IDLE;
@@ -247,6 +273,7 @@ module cpu_core #(
       jump_we  <= 1'b0;
 
       tx_start <= 1'b0;
+      rx_start <= 1'b0;
 
       case (state_id)
         S_IDLE: begin
@@ -370,11 +397,19 @@ module cpu_core #(
             8'h2E: begin  // '.'
               // display <= current_cell;
               // tx_start <= 1'b1;  // already hooked up to current_cell.
-              state_id <= S_TX_OUT;
+              // state_id <= S_TX_OUT;
+              if (!fast_req) begin
+                state_id <= S_TX_OUT;
+              end else begin  // skip the wait
+                tx_start <= 1'b1;
+                state_id <= S_EXEC_WAIT;
+              end
             end
 
             8'h2C: begin  // ','
-              current_cell <= exec_count[7:0];  // for now, just put exec count in cell lol
+              // current_cell <= exec_count[7:0];  // for now, just put exec count in cell lol
+              rx_start <= 1'b1;
+              state_id <= S_RX_IN;
             end
 
             // jumping now implemented by use_jump_rd logic.
@@ -400,7 +435,7 @@ module cpu_core #(
             if (prog_rd == 8'h3E || prog_rd == 8'h3C) begin
               cpu_priority <= 1'b1;  // take control of data tape
               state_id <= S_PTR_WRITEBACK;
-            end else if (prog_rd != 8'h2E) begin  // not .
+            end else if (prog_rd != 8'h2E && prog_rd != 8'h2C) begin  // not . or ,
               state_id <= S_EXEC_WAIT;
             end
 
@@ -414,9 +449,20 @@ module cpu_core #(
         end
 
         S_TX_OUT: begin
-          if (!tx_busy) begin
+          if (!tx_busy) begin  // done with prev tx?
             tx_start <= 1'b1;
             state_id <= S_EXEC_WAIT;
+          end
+        end
+
+        S_RX_IN: begin  // we have to wait one cycle for busy to get asserted
+          state_id <= S_RX_WAIT;
+        end
+
+        S_RX_WAIT: begin
+          if (!rx_busy) begin // done with curr rx? situation is asymmetric: max rx speeds are much lower.
+            current_cell <= rx_data;
+            state_id     <= S_EXEC_WAIT;
           end
         end
 
