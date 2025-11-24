@@ -9,11 +9,13 @@ SRCS = top.sv \
 	   cpu_core.sv \
 	   spram.sv \
 	   hvsync_generator.sv \
-	   loader.sv
+	   loader.sv \
+	   transmitter.sv \
+	   receiver.sv
 
 all: $(PROJ).rpt $(PROJ).bin
 
-$(PROJ).json: $(SRCS)
+$(PROJ).json: $(SRCS) prog_rom.sv
 	yosys -ql $(PROJ).yslog -p 'read_verilog -sv $(SRCS); synth_ice40 -top $(PROJ) -json $@; stat'
 
 $(PROJ).asc: $(PROJ).json icebreaker.pcf

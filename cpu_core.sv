@@ -18,10 +18,17 @@ module cpu_core #(
     output logic       loaded,
     output logic       executing,
     output logic [4:0] state_id,
-    output logic [7:0] display
+    // output logic [7:0] display,
+
+    input  logic rxd,
+    output logic txd,
+
+    output logic LED_GRN_N,
+    output logic LED_RED_N
 );
   typedef enum logic [4:0] {
     S_IDLE,
+    S_ZERO_DATA,
 
     // preprocess states
     S_PRE_ADDR,
@@ -36,15 +43,31 @@ module cpu_core #(
     S_EXEC_WAIT,
     S_EXECUTE,
 
+    S_TX_OUT,
+
     // writeback
     S_PTR_WRITEBACK,
     S_STEP_WAIT,
     S_PTR_READ_SETUP,
     S_PTR_READ_WAIT,
-    S_ZERO_DATA,
     S_PTR_READ_LATCH
 
   } state_t;
+
+
+  logic tx_start;
+
+
+  logic tx_busy;
+
+  transmitter tx_inst (
+      .clk(clk),
+      .rst_n(resetn),
+      .start(tx_start),
+      .busy(tx_busy),
+      .data_in(current_cell),
+      .txd(txd)
+  );
 
   logic [               31:0] exec_count;
 
@@ -80,7 +103,7 @@ module cpu_core #(
       .loaded(loaded)
   );
 
-  localparam int SLOWDOWN = 2;  // wait 2^(SLOWDOWN+1) cycles when SLOWDOWN != 0. since each inst takes ~2 cycles, this slows by ~2^SLOWDOWN.
+  localparam int SLOWDOWN = 0;  // wait 2^(SLOWDOWN+1) cycles when SLOWDOWN != 0. since each inst takes ~2 cycles, this slows by ~2^SLOWDOWN.
   logic [SLOWDOWN:0] slow_ctr = 0;
 
   // brainfuck data tape
@@ -189,7 +212,7 @@ module cpu_core #(
   task automatic do_reset();
     cpu_priority  <= '0;
     executing     <= '0;
-    display       <= '0;
+    tx_start      <= '0;
 
     data_we       <= '0;
     stack_we      <= '0;
@@ -222,6 +245,8 @@ module cpu_core #(
       data_we  <= 1'b0;
       stack_we <= 1'b0;
       jump_we  <= 1'b0;
+
+      tx_start <= 1'b0;
 
       case (state_id)
         S_IDLE: begin
@@ -343,10 +368,13 @@ module cpu_core #(
             end
 
             8'h2E: begin  // '.'
-              display <= current_cell;
+              // display <= current_cell;
+              // tx_start <= 1'b1;  // already hooked up to current_cell.
+              state_id <= S_TX_OUT;
             end
 
-            8'h2C: begin  // ',' (input not implemented)
+            8'h2C: begin  // ','
+              current_cell <= exec_count[7:0];  // for now, just put exec count in cell lol
             end
 
             // jumping now implemented by use_jump_rd logic.
@@ -372,7 +400,7 @@ module cpu_core #(
             if (prog_rd == 8'h3E || prog_rd == 8'h3C) begin
               cpu_priority <= 1'b1;  // take control of data tape
               state_id <= S_PTR_WRITEBACK;
-            end else begin
+            end else if (prog_rd != 8'h2E) begin  // not .
               state_id <= S_EXEC_WAIT;
             end
 
@@ -382,6 +410,13 @@ module cpu_core #(
             // reached end: stop executing
             executing <= 1'b0;
             state_id  <= S_IDLE;
+          end
+        end
+
+        S_TX_OUT: begin
+          if (!tx_busy) begin
+            tx_start <= 1'b1;
+            state_id <= S_EXEC_WAIT;
           end
         end
 

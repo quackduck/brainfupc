@@ -10,7 +10,6 @@ def bf_to_verilog(bf_code):
     print("    case (prog_addr)")
     for i, c in enumerate(bf_code):
         if c in '><+-.,[]':
-            inst+=1
             code = {
                 '>': 0x3E,
                 '<': 0x3C,
@@ -21,7 +20,8 @@ def bf_to_verilog(bf_code):
                 '[': 0x5B,
                 ']': 0x5D,
             }[c]
-            print(f"        {i}: prog_wr <= 8'h{code:02X};  // {c}")
+            print(f"        {inst}: prog_wr <= 8'h{code:02X};  // {c}")
+            inst+=1
     print("        default: prog_wr <= 8'h00;")
     print("    endcase")
     print(" // number of instructions:", inst)

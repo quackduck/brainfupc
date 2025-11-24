@@ -4,19 +4,25 @@ module top (
     input  clk12,
     input  BTN_N,  // reset (active low)
     input  BTN1,   // run/once
-    input  BTN2,   // debug change
+    // input  BTN2,   // debug change
     input  BTN3,   // load program
     output LED1,
-    output LED2,
-    output LED3,
+    // output LED2,
+    // output LED3,
     output LED4,
-    output LED5,
+    // output LED5,
 
     output vga_h_sync,
     output vga_v_sync,
     output logic [3:0] r,
     output logic [3:0] g,
-    output logic [3:0] b
+    output logic [3:0] b,
+
+    input  logic rxd,
+    output logic txd,
+
+    output logic LED_RED_N,
+    output logic LED_GRN_N
 
     // output P1A1,
     // P1A2,
@@ -46,7 +52,7 @@ module top (
   //   assign {P1A10, P1A9, P1A8, P1A7, P1A4, P1A3, P1A2, P1A1} = seven_segment;
 
   // debounced signals
-  wire db_btn1, db_btn2, db_btn3;
+  wire db_btn1, db_btn3;
   debounce #(
       .CTR_WIDTH(18)
   ) db1 (
@@ -54,13 +60,13 @@ module top (
       .noisy(BTN1),
       .clean(db_btn1)
   );
-  debounce #(
-      .CTR_WIDTH(18)
-  ) db2 (
-      .clk  (clk_pixel),
-      .noisy(BTN2),
-      .clean(db_btn2)
-  );
+  // debounce #(
+  //     .CTR_WIDTH(18)
+  // ) db2 (
+  //     .clk  (clk_pixel),
+  //     .noisy(BTN2),
+  //     .clean(db_btn2)
+  // );
   debounce #(
       .CTR_WIDTH(18)
   ) db3 (
@@ -71,7 +77,7 @@ module top (
 
   wire loaded;
   wire [4:0] state_id;
-  wire [7:0] display_value;
+  // wire [7:0] display_value;
   wire executing;
 
   logic [21:0] slow_clk = 0;
@@ -83,14 +89,14 @@ module top (
   // integer slowdown = 0;
 
   // edge detectors -> single-cycle pulses
-  logic db_btn1_last = 0, db_btn2_last = 0, db_btn3_last = 0;
+  logic db_btn1_last = 0, db_btn3_last = 0;
   wire btn1_pulse = db_btn1 & ~db_btn1_last;
-  wire btn2_pulse = db_btn2 & ~db_btn2_last;
+  // wire btn2_pulse = db_btn2 & ~db_btn2_last;
   wire btn3_pulse = db_btn3 & ~db_btn3_last;
   // always @(posedge slow_clk[slowdown]) begin
   always @(posedge clk_pixel) begin
     db_btn1_last <= db_btn1;
-    db_btn2_last <= db_btn2;
+    // db_btn2_last <= db_btn2;
     db_btn3_last <= db_btn3;
   end
 
@@ -114,21 +120,27 @@ module top (
       // .clk      (slow_clk[slowdown]),  // slow clock for visibility
       .resetn         (resetn),
       .start_req      (btn1_pulse),
-      .step_req       (btn2_pulse),
+      .step_req       (0),
       .load_req       (btn3_pulse),
       .loaded         (loaded),
       .executing      (executing),
       .state_id       (state_id),
-      .display        (display_value)
+      // .display        (display_value),
+
+      .txd(txd),
+      .rxd(rxd),
+      .LED_GRN_N(LED_GRN_N),
+      .LED_RED_N(LED_RED_N)
   );
 
   // status leds
-  assign LED1 = ~(state_id == 5'd0);  // not IDLE
+  // assign LED1 = ~(state_id == 5'd0);  // not IDLE
+  // assign LED1 = loaded;
   // assign LED2 = (state_id == 3'd1);  // LOAD
-  assign LED2 = (state_id == 5'd17);  // STEP WAIT
-  assign LED3 = (state_id == 5'd2);  // PREPROCESS (unused now)
+  // assign LED2 = (state_id == 5'd17);  // STEP WAIT
+  // assign LED3 = (state_id == 5'd2);  // PREPROCESS (unused now)
   assign LED4 = executing;  // in execution
-  assign LED5 = loaded;
+  // assign LED5 = loaded;
 
   //   // seven-seg
   //   seven_seg_ctrl ssc (
@@ -153,7 +165,10 @@ module top (
   always @(posedge clk_pixel) begin
     // vga_data_addr <= {CounterY[9:3], CounterX[9:3]};  // uhhh idk
     // addr <= y' * 80 + x' // 80 = 640 / 2^3 (3 bits chopped off.)
-    vga_data_addr <= 14'(CounterY[9:3] * 80) + 14'(CounterX[9:3]);
+    vga_data_addr <= 15'(CounterY[9:3] * 80) + 15'(CounterX[9:3]);
+
+    // we want to cover all 32768 bytes. we can cover 19,200 with 160 * 120. chop off 2 bits from each.
+    // if (inDisplayArea) vga_data_addr <= 15'(CounterY[9:2] * 160) + 15'(CounterX[9:2]);
   end
 
   always @(posedge clk_pixel) begin
