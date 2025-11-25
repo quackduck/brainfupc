@@ -48,7 +48,7 @@ set_io -nowarn P1B9       32
 set_io -nowarn P1B10      28
 
 
-# most of pmod 1a and 1b are used by the vga:
+# most of pmod 1a and 1b are used by the vga. only P1B9 and P1B10 are unused.
 
 set_io   vga_h_sync             42
 set_io   vga_v_sync             36

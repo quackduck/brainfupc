@@ -14,8 +14,11 @@ module top (
     output logic [3:0] g,
     output logic [3:0] b,
 
-    input  logic rxd,
-    output logic txd,
+    // input  logic rxd,
+    // output logic txd,
+
+    input  logic RX,
+    output logic TX,
 
     output logic LED_RED_N,
     output logic LED_GRN_N
@@ -96,16 +99,13 @@ module top (
     db_btn3_last <= db_btn3;
   end
 
-
-  // // sim:
-  // wire btn3_pulse = db_btn3;  // direct connection
-  // wire btn1_pulse = db_btn1;  // direct connection
-
   wire resetn = BTN_N;  // BTN_N active low, treat as active-high resetn
 
 
   logic [14:0] vga_data_addr;
   logic [7:0] vga_cell;
+
+  logic [63:0] exec_count;  // display somewhere?
 
   cpu_core core (
       .clk            (clk_pixel),
@@ -114,17 +114,19 @@ module top (
       .in_display_area(inDisplayArea),
       .resetn         (resetn),
       .start_req      (btn1_pulse),
-      .step_req       (0),
+      .step_req       (1'b0),
       .fast_req       (db_btn3),        // hold to skip waiting for tx
       // .load_req       (btn3_pulse),
       .loaded         (loaded),
       .executing      (executing),
       // .state_id       (state_id),
 
-      .txd(txd),
-      .rxd(rxd)
-      // .LED_GRN_N(LED_GRN_N),
-      // .LED_RED_N(LED_RED_N)
+      .exec_count(exec_count),
+
+      .txd(TX),
+      .rxd(RX),
+      .LED_GRN_N(LED_GRN_N),
+      .LED_RED_N(LED_RED_N)
   );
 
   // status leds

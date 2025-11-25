@@ -20,10 +20,12 @@ module cpu_core #(
     output logic executing,
 
     input  logic rxd,
-    output logic txd
+    output logic txd,
 
-    // output logic LED_GRN_N,
-    // output logic LED_RED_N
+    output logic LED_GRN_N,
+    output logic LED_RED_N,
+
+    output logic [63:0] exec_count
 );
   typedef enum logic [4:0] {
     S_IDLE,
@@ -82,6 +84,9 @@ module cpu_core #(
   logic rx_busy;
   logic [7:0] rx_data;
 
+  // assign LED_GRN_N = ~(rx_data == 8'h0a);  // light green led when receiving newline
+  // assign LED_RED_N = ~(rx_data == 8'h0d);  // light red led when cr
+
   receiver #(
       .BAUD(BAUD),
       .CLOCK_FREQ(CLOCK_FREQ)
@@ -93,8 +98,6 @@ module cpu_core #(
       .data_out(rx_data),
       .rxd(rxd)
   );
-
-  logic [               31:0] exec_count;
 
   logic [PROG_ADDR_WIDTH-1:0] iptr;  // owned by cpu
   logic [                7:0] prog_rd;  // owned by cpu
@@ -148,9 +151,6 @@ module cpu_core #(
 
   logic              cpu_priority;  // set before doing ops with data tape.
 
-  // assign _data_addr = in_display_area ? vga_data_addr[13:0] : dptr[13:0];
-  // assign byte_sel = in_display_area ? vga_data_addr[14] : dptr[14];  // dptr[14];
-
   assign _data_addr = cpu_priority ? dptr[13:0] : vga_data_addr[13:0];
   assign byte_sel   = cpu_priority ? dptr[14] : vga_data_addr[14];  // dptr[14];
 
@@ -159,17 +159,6 @@ module cpu_core #(
 
   assign vga_cell   = data_rd;
 
-  // // Dual-port BRAM just for data tape so we can display.
-  // (* syn_ramstyle = "block_ram" *)
-  // localparam [PROG_ADDR_WIDTH-1:0] MAX_ADDR = 7167;  // unfortunately limited by bram... ideally 16383 or 30k
-  // logic [7:0] data_mem[0:MAX_ADDR];
-
-  // // Port A: CPU side (read/write) // todo: maybe switch this to save on CPU cycles? we dont care too much about vga.
-  // always_ff @(posedge clk) begin
-  //   if (data_we) data_mem[dptr] <= data_wr;
-  //   data_rd <= data_mem[dptr];
-  // end
-
   spram data_mem (
       .clk(clk),
       .we(_data_we),
@@ -177,12 +166,6 @@ module cpu_core #(
       .data_in({data_wr, data_wr}),
       .data_out(_data_rd)
   );
-
-  // // Port B: VGA read-only
-  // logic [7:0] vga_cell_reg;
-  // assign vga_cell = data_mem[vga_data_addr];
-
-
 
   logic [                7:0] current_cell;  // cached data cell
   logic [  PROG_ADDR_WIDTH:0] dptr_next;
@@ -194,14 +177,14 @@ module cpu_core #(
   logic [PROG_ADDR_WIDTH-1:0] stack_rd;
   assign stack_rd = _stack_rd[PROG_ADDR_WIDTH-1:0];
 
-  logic [PROG_ADDR_WIDTH-1:0] stack_ptr;  // at most half the program is [
+  logic [PROG_ADDR_WIDTH-1:0] stack_ptr;
 
   spram bracket_stack (
       .clk(clk),
       .we(stack_we ? 4'b1111 : 4'b0000),
       .addr(stack_ptr),
       .data_in({{(16 - PROG_ADDR_WIDTH) {1'b0}}, stack_wr}),
-      .data_out(_stack_rd)  // only lower PROG_ADDR_WIDTH bits used
+      .data_out(_stack_rd)
   );
 
   // jump table stores address of matching bracket for each bracket.
@@ -222,10 +205,8 @@ module cpu_core #(
   );
 
   logic [7:0] last_inst;
-  logic [PROG_ADDR_WIDTH-1:0] popped_addr;
 
   logic [14:0] zero_ptr;
-  // logic [7:0] current_cell_next;
 
   // todo: edge case where we jump past program??
   logic use_jump_rd;
@@ -235,31 +216,17 @@ module cpu_core #(
   end
 
   task automatic do_reset();
-    cpu_priority  <= '0;
-    executing     <= '0;
-    tx_start      <= '0;
-    rx_start      <= '0;
+    cpu_priority <= '0;
+    executing    <= '0;
 
-    data_we       <= '0;
-    stack_we      <= '0;
-    jump_we       <= '0;
-    iptr          <= '0;
+    iptr         <= '0;
+    dptr         <= '0;
+    dptr_next    <= '0;
 
-    dptr          <= '0;
-    dptr_next     <= '0;
+    current_cell <= '0;
 
-    current_cell  <= '0;
-
-    stack_ptr     <= '0;
-    stack_wr      <= '0;
-    popped_addr   <= '0;
-
-    jump_addr_reg <= '0;
-    jump_wr       <= '0;
-
-    last_inst     <= '0;
-    exec_count    <= '0;
-    zero_ptr      <= '0;
+    last_inst    <= '0;
+    exec_count   <= '0;
   endtask
 
   always @(posedge clk or negedge resetn) begin : cpu_fsm
@@ -281,19 +248,19 @@ module cpu_core #(
           if (start_req && loaded) begin
             do_reset();
             executing <= 1'b1;
+
             cpu_priority <= 1'b1;  // take control of data tape
+            zero_ptr <= '0;
             state_id <= S_ZERO_DATA;
           end
         end
 
         S_ZERO_DATA: begin
-          // // todo: make this work with display area too.
-          // if (!in_display_area) begin
           data_we <= 1'b1;
           dptr <= zero_ptr;
           data_wr <= 8'h00;
           zero_ptr <= zero_ptr + 1;
-          // end
+
           if (zero_ptr == '1) begin
             zero_ptr <= '0;
             dptr <= '0;
@@ -315,6 +282,7 @@ module cpu_core #(
             iptr <= '0;
             // preprocessing finished: move to fetch/execute
             state_id <= S_EXEC_WAIT;
+            stack_ptr <= '0;
           end else if (prog_rd == 8'h5B) begin  // [
             stack_wr <= iptr;
             stack_we <= 1'b1;
@@ -336,8 +304,6 @@ module cpu_core #(
 
         S_PRE_STACK_READ: begin
           // stack_rd is the [ address
-          popped_addr <= stack_rd;
-
           // write jump_table[stack_rd] = iptr (address of ])
           jump_addr_reg <= stack_rd;
           jump_wr <= iptr;
@@ -349,7 +315,7 @@ module cpu_core #(
         S_PRE_JUMP_W1: begin
           // write the reverse mapping: jump_table[iptr] = stack_rd
           jump_addr_reg <= iptr;
-          jump_wr <= popped_addr;
+          jump_wr <= stack_rd;
           jump_we <= 1'b1;
 
           state_id <= S_PRE_JUMP_DONE;
@@ -367,7 +333,7 @@ module cpu_core #(
         end
 
         S_SLOWDOWN: begin // doesnt get triggered on PTR_READ_LATCH but thats fine, we just want a slowdown on most insts.
-          if (&slow_ctr[SLOWDOWN:0]) begin
+          if (slow_ctr == '1) begin
             slow_ctr <= '0;
             state_id <= S_EXECUTE;
           end else begin
@@ -378,49 +344,37 @@ module cpu_core #(
         S_EXECUTE: begin  // can be reached either from EXEC_WAIT or PTR_READ_LATCH
           exec_count <= exec_count + 1;
           case (prog_rd)
-            8'h3E: begin  // '>' - increment data pointer
-              dptr_next <= dptr + 1;  // writeback scheduled
+
+            8'h3E, 8'h3C: begin  // > < : inc/dec data pointer
+              dptr_next <= prog_rd == 8'h3E ? dptr + 1 : dptr - 1;
+              cpu_priority <= 1'b1;  // take control of data tape
+              state_id <= S_PTR_WRITEBACK;  // writeback scheduled
             end
 
-            8'h3C: begin  // '<' - decrement data pointer
-              dptr_next <= dptr - 1;  // writeback scheduled
+            8'h2B, 8'h2D: begin  // + - : inc/dec current cell
+              current_cell <= prog_rd == 8'h2B ? current_cell + 1 : current_cell - 1;
+              state_id <= S_EXEC_WAIT;
             end
 
-            8'h2B: begin  // '+'
-              current_cell <= current_cell + 1;
-            end
-
-            8'h2D: begin  // '-'
-              current_cell <= current_cell - 1;
-            end
-
-            8'h2E: begin  // '.'
-              // display <= current_cell;
-              // tx_start <= 1'b1;  // already hooked up to current_cell.
-              // state_id <= S_TX_OUT;
+            8'h2E: begin  // .
               if (!fast_req) begin
                 state_id <= S_TX_OUT;
               end else begin  // skip the wait
-                tx_start <= 1'b1;
+                tx_start <= 1'b1;  // tx is hooked up to current_cell.
                 state_id <= S_EXEC_WAIT;
               end
             end
 
-            8'h2C: begin  // ','
-              // current_cell <= exec_count[7:0];  // for now, just put exec count in cell lol
+            8'h2C: begin  // ,
               rx_start <= 1'b1;
               state_id <= S_RX_IN;
             end
 
-            // jumping now implemented by use_jump_rd logic.
-            8'h5B: begin  // '['
-            end
-            8'h5D: begin  // ']'
+            8'h5B, 8'h5D: begin  // [ ] : jumps handled in use_jump_rd logic
+              state_id <= S_EXEC_WAIT;
             end
 
-            default: begin
-              // state_id <= S_FETCH_ADDR;
-            end
+            default: ;
           endcase
 
           last_inst <= prog_rd;
@@ -428,19 +382,6 @@ module cpu_core #(
           if (iptr < PROG_LEN) begin
             iptr <= use_jump_rd ? jump_rd + 1 : iptr + 1;
             jump_addr_reg <= use_jump_rd ? jump_rd + 1 : iptr + 1;
-
-            // todo: skip write and go to read if cell value not changed.
-            // state_id <= (prog_rd == 8'h3E || prog_rd == 8'h3C) ? S_PTR_WRITEBACK : S_EXEC_WAIT;
-
-            if (prog_rd == 8'h3E || prog_rd == 8'h3C) begin
-              cpu_priority <= 1'b1;  // take control of data tape
-              state_id <= S_PTR_WRITEBACK;
-            end else if (prog_rd != 8'h2E && prog_rd != 8'h2C) begin  // not . or ,
-              state_id <= S_EXEC_WAIT;
-            end
-
-
-            // state_id      <= (prog_rd == 8'h3E || prog_rd == 8'h3C) ? S_PTR_WRITEBACK : S_STEP_WAIT;
           end else begin
             // reached end: stop executing
             executing <= 1'b0;
@@ -467,35 +408,14 @@ module cpu_core #(
         end
 
         S_PTR_WRITEBACK: begin
-          // if (in_display_area) begin
-          //   state_id <= S_PTR_WRITEBACK;  // stay here until we leave display area
-          // end else begin
           data_wr  <= current_cell;
           data_we  <= 1'b1;
           state_id <= S_PTR_READ_SETUP;
-          // end
         end
 
         S_PTR_READ_SETUP: begin
           dptr     <= dptr_next;  // request new address read
-
-          // if dptr_next == MAX_ADDR+1, wrap around to 0. if dptr_next == all 1s, wrap to MAX_ADDR. rethink when max_addr changes..
-          // dptr <= (dptr_next == MAX_ADDR + 1) ? '0 : (dptr_next == '1) ? MAX_ADDR : dptr_next;
-
           state_id <= S_PTR_READ_WAIT;
-
-
-          // if (in_display_area) begin
-          //   state_id <= S_PTR_READ_SETUP;  // stay here until we leave display area
-          // end else begin
-          //   dptr     <= dptr_next;  // request new address read
-
-          //   // if dptr_next == MAX_ADDR+1, wrap around to 0. if dptr_next == all 1s, wrap to MAX_ADDR. rethink when max_addr changes..
-          //   // dptr <= (dptr_next == MAX_ADDR + 1) ? '0 : (dptr_next == '1) ? MAX_ADDR : dptr_next;
-
-          //   state_id <= S_PTR_READ_WAIT;
-          // end
-
         end
 
         S_PTR_READ_WAIT: begin
