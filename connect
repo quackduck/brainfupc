@@ -1,2 +1,2 @@
 #!/bin/bash
-picocom /dev/tty.usbserial-AV0KOE0W --baud 1500000 --imap lfcrlf --omap crlf --echo
+picocom /dev/tty.usbserial-ibDXwx7C1 --baud 1500000 --imap lfcrlf --omap crlf --echo
