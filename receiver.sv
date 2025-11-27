@@ -57,6 +57,7 @@ module receiver #(
               state <= WAIT_1_BIT;
             end
           end else begin
+            baud_cnt <= 0;
             // wait here for start bit.
           end
 
@@ -76,7 +77,7 @@ module receiver #(
         end
 
         WAIT_1_BIT_AGAIN: begin
-          if (baud_cnt == BIT_PERIOD - 1) begin
+          if (baud_cnt == BIT_PERIOD - 2) begin
             baud_cnt <= 0;
             if (bit_idx == 3'd7) begin
               bit_idx <= 0;

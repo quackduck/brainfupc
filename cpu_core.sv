@@ -12,7 +12,7 @@ module cpu_core #(
     input logic start_req,
     input logic step_req,
     input logic fast_req,   // skip waiting for serial tx
-    // input logic load_req,
+    input logic load_req,
 
     input logic in_display_area,
 
@@ -59,14 +59,14 @@ module cpu_core #(
   logic [4:0] state_id;
 
 
+  // localparam integer BAUD = 9600;
+  localparam integer BAUD = 1_500_000;  // exactly 17 clock cycles.
+  localparam integer CLOCK_FREQ = 25_500_000;
+
   logic tx_start;
   logic tx_busy;
   logic [7:0] tx_data;
   assign tx_data = current_cell;
-
-  // localparam integer BAUD = 9600;
-  localparam integer BAUD = 1_500_000;  // exactly 17 clock cycles.
-  localparam integer CLOCK_FREQ = 25_500_000;
 
   transmitter #(
       .BAUD(BAUD),
@@ -99,6 +99,44 @@ module cpu_core #(
       .rxd(rxd)
   );
 
+
+
+  // // logic rx_start;
+  // logic rx_busy;
+  // logic [7:0] rx_data;
+
+  // logic valid_out;
+
+  // receiver #(
+  //     .BAUD(BAUD),
+  //     .CLOCK_FREQ(CLOCK_FREQ)
+  // ) rx_inst (
+  //     .clk(clk),
+  //     .rst_n(resetn),
+  //     // .start(1),
+  //     .valid_out(valid_out),
+  //     .busy(rx_busy),
+  //     .data_out(rx_data),
+  //     .rxd(rxd)
+  // );
+
+  // logic tx_start;
+  // logic tx_busy;
+  // // assign tx_data = current_cell;
+
+  // transmitter #(
+  //     .BAUD(BAUD),
+  //     .CLOCK_FREQ(CLOCK_FREQ)
+  // ) tx_inst (
+  //     .clk(clk),
+  //     .rst_n(resetn),
+  //     .start(valid_out),
+  //     .busy(tx_busy),
+  //     .data_in(rx_data),
+  //     .txd(txd)
+  // );
+
+
   logic [PROG_ADDR_WIDTH-1:0] iptr;  // owned by cpu
   logic [                7:0] prog_rd;  // owned by cpu
 
@@ -123,7 +161,7 @@ module cpu_core #(
   ) loader_inst (
       .clk(clk),
       .resetn(resetn),
-      .load_req(1'b1),  // always load.
+      .load_req(load_req),
 
       .prog_we(loader_we),
       .prog_addr(loader_addr),
@@ -227,7 +265,26 @@ module cpu_core #(
 
     last_inst    <= '0;
     exec_count   <= '0;
+
+    do_blink     <= 1'b0;
+
+    // LED_GRN_N    <= 1'b1;  // off
+    // LED_RED_N    <= 1'b1;  // off
   endtask
+
+
+
+  logic do_blink;
+  logic [23:0] blink_ctr;
+  always_ff @(posedge clk) begin
+    if (do_blink) begin
+      blink_ctr <= blink_ctr + 1;
+      LED_GRN_N <= blink_ctr[23];
+    end else begin
+      blink_ctr <= '0;
+      LED_GRN_N <= 1'b1;  // off
+    end
+  end
 
   always @(posedge clk or negedge resetn) begin : cpu_fsm
     if (!resetn) begin
@@ -241,6 +298,9 @@ module cpu_core #(
 
       tx_start <= 1'b0;
       rx_start <= 1'b0;
+
+      // LED_GRN_N <= 1'b1;  // off
+      // LED_RED_N <= 1'b1;  // off
 
       case (state_id)
         S_IDLE: begin
@@ -374,7 +434,7 @@ module cpu_core #(
               state_id <= S_EXEC_WAIT;
             end
 
-            default: ;
+            default: state_id <= S_EXEC_WAIT;  // nop
           endcase
 
           last_inst <= prog_rd;

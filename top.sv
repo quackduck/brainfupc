@@ -116,7 +116,7 @@ module top (
       .start_req      (btn1_pulse),
       .step_req       (1'b0),
       .fast_req       (db_btn3),        // hold to skip waiting for tx
-      // .load_req       (btn3_pulse),
+      .load_req       (btn3_pulse),
       .loaded         (loaded),
       .executing      (executing),
       // .state_id       (state_id),
