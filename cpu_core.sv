@@ -12,7 +12,7 @@ module cpu_core #(
     input logic start_req,
     input logic step_req,
     input logic fast_req,   // skip waiting for serial tx
-    input logic load_req,
+    // input logic load_req,
 
     input logic in_display_area,
 
@@ -163,7 +163,7 @@ module cpu_core #(
   ) loader_inst (
       .clk(clk),
       .resetn(resetn),
-      .load_req(load_req),
+      // .load_req(load_req),
 
       .prog_we(loader_we),
       .prog_addr(loader_addr),

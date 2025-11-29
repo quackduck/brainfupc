@@ -116,7 +116,7 @@ module top (
       .start_req      (btn1_pulse),
       .step_req       (1'b0),
       .fast_req       (db_btn3),        // hold to skip waiting for tx
-      .load_req       (btn3_pulse),
+      // .load_req       (btn3_pulse),
       .loaded         (loaded),
       .executing      (executing),
       // .state_id       (state_id),
@@ -131,7 +131,7 @@ module top (
 
   // status leds
   // assign LED1 = ~(state_id == 5'd0);  // not IDLE
-  // assign LED1 = loaded;
+  assign LED1 = loaded;
   // assign LED2 = (state_id == 3'd1);  // LOAD
   // assign LED2 = (state_id == 5'd17);  // STEP WAIT
   // assign LED3 = (state_id == 5'd2);  // PREPROCESS (unused now)
