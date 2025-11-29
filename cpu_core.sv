@@ -60,7 +60,9 @@ module cpu_core #(
 
 
   // localparam integer BAUD = 9600;
-  localparam integer BAUD = 1_500_000;  // exactly 17 clock cycles.
+  // localparam integer BAUD = 1_500_000;  // exactly 17 clock cycles.
+  // localparam integer BAUD = 1593750;  // 16 cycles at 25.5MHz
+  localparam integer BAUD = 2125000;  // 12 cycles at 25.5MHz
   localparam integer CLOCK_FREQ = 25_500_000;
 
   logic tx_start;
@@ -96,7 +98,7 @@ module cpu_core #(
       .start(rx_start),
       .busy(rx_busy),
       .data_out(rx_data),
-      .rxd(rxd)
+      .rxd_async(rxd)
   );
 
 
