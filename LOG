@@ -17,3 +17,11 @@ for using spram with one rw port for both vga and
 speedup button to ignore the serial waits!!??
 
 https://cervisial.wordpress.com/2016/02/02/using-serial-adapters-with-baudrates-230400-on-osx/
+
+
+
+could run mem at 2x speed to get next-cycle reads. 
+
+could do this: set addr, set addr+1, read & set addr+2, read+1 & set addr+3...
+
+could load curr, prev and next cell. might be able to save stuff by just shifting..?

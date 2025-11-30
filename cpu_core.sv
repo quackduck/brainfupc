@@ -1,7 +1,7 @@
 `default_nettype none
 module cpu_core #(
-    parameter int PROG_ADDR_WIDTH = 14,
-    parameter logic [PROG_ADDR_WIDTH-1:0] PROG_LEN = 16383
+    parameter int PROG_ADDR_WIDTH = 14
+    // parameter logic [PROG_ADDR_WIDTH-1:0] PROG_LEN = 16383
 ) (
     input logic clk,
 
@@ -26,7 +26,9 @@ module cpu_core #(
   typedef enum logic [4:0] {
     S_IDLE,
     S_ZERO_DATA,
+    S_ZDATA_END,
     S_ZERO_PROG,
+    S_ZPROG_END,
 
     // serial load states
     S_SERLD_RX,
@@ -192,7 +194,6 @@ module cpu_core #(
   );
 
   logic [14:0] zero_ptr;
-
   logic [PROG_ADDR_WIDTH-1:0] load_ptr;
 
   // todo: edge case where we jump past program??
@@ -201,26 +202,6 @@ module cpu_core #(
     use_jump_rd = (prog_rd == 8'h5B && current_cell == 8'h00) ||
                       (prog_rd == 8'h5D && current_cell != 8'h00);
   end
-
-  task automatic do_reset();
-    cpu_priority <= '0;
-    executing    <= '0;
-
-    iptr         <= '0;
-    dptr         <= '0;
-    dptr_next    <= '0;
-
-    current_cell <= '0;
-
-    exec_count   <= '0;
-
-    do_blink     <= 1'b0;
-
-    // LED_GRN_N    <= 1'b1;  // off
-    // LED_RED_N    <= 1'b1;  // off
-  endtask
-
-
 
   logic do_blink;
   logic [23:0] blink_ctr;
@@ -236,8 +217,10 @@ module cpu_core #(
 
   always @(posedge clk or negedge resetn) begin : cpu_fsm
     if (!resetn) begin
-      do_reset();
-      state_id <= S_IDLE;
+      do_blink     <= 1'b0;
+      cpu_priority <= '0;
+
+      state_id     <= S_IDLE;
     end else begin
       // these get overridden as needed.
       data_we  <= 1'b0;
@@ -264,15 +247,18 @@ module cpu_core #(
           prog_wr <= 8'h00;
           load_ptr <= load_ptr + 1;
 
-          if (load_ptr == '1) begin
-            current_cell <= 8'd82;  // capital R for "ready"
-            tx_start     <= 1'b1;
+          if (load_ptr == '1) state_id <= S_ZPROG_END;
+        end
 
-            iptr         <= '0;
-            load_ptr     <= '0;
-            rx_start     <= 1'b1;
-            state_id     <= S_SERLD_WAITBUSY;
-          end
+        S_ZPROG_END: begin
+          // todo: less tacky (rn we have current_cell hooked up to tx directly.)
+          current_cell <= 8'd82;  // capital R for "ready".
+          tx_start     <= 1'b1;
+
+          iptr         <= '0;
+          load_ptr     <= '0;
+          rx_start     <= 1'b1;
+          state_id     <= S_SERLD_WAITBUSY;
         end
 
         S_SERLD_WAITBUSY: begin  // takes one cycle to assert rx_busy
@@ -281,17 +267,21 @@ module cpu_core #(
         end
 
         S_SERLD_RX: begin
-          if (!rx_busy) begin  // wait until rx done
-            if (rx_data == 8'h04 || iptr == PROG_LEN) begin  // ctrl D
+          if (!rx_busy || iptr == '1) begin  // wait until rx done
+            if (rx_data == 8'h04 || iptr == '1) begin  // ctrl D. iptr holds addr that has just been written to.
               // done loading
-              iptr     <= '0;
-              load_ptr <= '0;
-              do_reset();
-              executing <= 1'b1; // pessimistic. we even allow zero data to be included in exec time.
+              iptr         <= '0;
+              load_ptr     <= '0;
+
+              // do_reset();
+              executing    <= 1'b1;  // we even allow zero_data to be included in exec time.
+              current_cell <= '0;
+              exec_count   <= '0;
 
               cpu_priority <= 1'b1;  // take control of data tape
-              zero_ptr <= '0;
-              state_id <= S_ZERO_DATA;
+              dptr         <= '0;
+              zero_ptr     <= '0;
+              state_id     <= S_ZERO_DATA;
             end else begin
               prog_wr <= rx_data;
               prog_we <= 1'b1;
@@ -299,7 +289,7 @@ module cpu_core #(
               iptr <= load_ptr;
               load_ptr <= load_ptr + 1;
 
-              rx_start <= 1'b1;  // start next rx
+              if (load_ptr != '1) rx_start <= 1'b1;  // start next rx
               state_id <= S_SERLD_WAITBUSY;
             end
           end
@@ -309,14 +299,16 @@ module cpu_core #(
           data_we <= 1'b1;
           dptr <= zero_ptr;
           data_wr <= 8'h00;
-          zero_ptr <= zero_ptr + 1;
+          zero_ptr <= zero_ptr + 1;  // todo: check if this indirection is actually needed
 
-          if (zero_ptr == '1) begin
-            zero_ptr <= '0;
-            dptr <= '0;
-            cpu_priority <= 1'b0;  // release data tape
-            state_id <= S_PRE_ADDR;
-          end
+          if (zero_ptr == '1) state_id <= S_ZDATA_END;
+        end
+
+        S_ZDATA_END: begin
+          zero_ptr <= '0;
+          dptr <= '0;
+          cpu_priority <= 1'b0;  // release data tape
+          state_id <= S_PRE_ADDR;
         end
 
 
@@ -328,12 +320,7 @@ module cpu_core #(
         end
 
         S_PRE_READ: begin
-          if (iptr == PROG_LEN) begin
-            iptr <= '0;
-            // preprocessing finished: move to fetch/execute
-            state_id <= S_EXEC_WAIT;
-            stack_ptr <= '0;
-          end else if (prog_rd == 8'h5B) begin  // [
+          if (prog_rd == 8'h5B) begin  // [
             stack_wr <= iptr;
             stack_we <= 1'b1;
 
@@ -345,6 +332,12 @@ module cpu_core #(
           end else begin
             iptr <= iptr + 1;
             state_id <= S_PRE_ADDR;
+          end
+
+          if (iptr == '1) begin  // done preprocessing
+            iptr <= '0;
+            state_id <= S_EXEC_WAIT;
+            stack_ptr <= '0;
           end
         end
 
@@ -429,13 +422,17 @@ module cpu_core #(
 
           // last_inst <= prog_rd;
 
-          if (iptr < PROG_LEN) begin
+          if (iptr < '1) begin
             iptr <= use_jump_rd ? jump_rd + 1 : iptr + 1;
             jump_addr_reg <= use_jump_rd ? jump_rd + 1 : iptr + 1;
           end else begin
             // reached end: stop executing
-            executing <= 1'b0;
-            state_id  <= S_IDLE;
+            executing <= 1'b0;  // let this instruction execute.
+            // state_id  <= S_IDLE;
+          end
+
+          if (~executing) begin  // came back from last instruction
+            state_id <= S_IDLE;
           end
         end
 
