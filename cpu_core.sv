@@ -30,6 +30,11 @@ module cpu_core #(
   typedef enum logic [4:0] {
     S_IDLE,
     S_ZERO_DATA,
+    S_ZERO_PROG,
+
+    // S_SERLD_START,
+    S_SERLD_RX,
+    S_SERLD_WAITBUSY,
 
     // preprocess states
     S_PRE_ADDR,
@@ -142,34 +147,38 @@ module cpu_core #(
   logic [PROG_ADDR_WIDTH-1:0] iptr;  // owned by cpu
   logic [                7:0] prog_rd;  // owned by cpu
 
+
   logic [               15:0] _prog_rd;
   assign prog_rd = _prog_rd[7:0];  // only lower 8 bits used.
 
-  logic [PROG_ADDR_WIDTH-1:0] loader_addr;  // owned by loader
-  logic [                7:0] loader_wr;  // owned by loader
-  logic                       loader_we;  // owned by loader
+  // logic [PROG_ADDR_WIDTH-1:0] loader_addr;  // owned by loader
+  // logic [                7:0] loader_wr;  // owned by loader
+  // logic                       loader_we;  // owned by loader
 
-  spram program_memory (  // todo: this stores a 3 bit object in 16 bits...
+  logic [7:0] prog_wr;
+  logic prog_we;
+
+  spram program_memory (  // todo: this stores a 3 bit object in 16 bits... it would at least be easy to do two bytes instead of one.
       .clk(clk),
-      .we(loader_we ? 4'b1111 : 4'b0000),
-      .addr(loaded ? iptr : loader_addr),
-      .data_in({8'h00, loader_wr}),
+      .we(prog_we ? 4'b1111 : 4'b0000),
+      .addr(iptr),
+      .data_in({8'h00, prog_wr}),
       .data_out(_prog_rd)
   );
 
-  loader #(
-      .PROG_ADDR_WIDTH(PROG_ADDR_WIDTH),
-      .PROG_LEN(PROG_LEN)
-  ) loader_inst (
-      .clk(clk),
-      .resetn(resetn),
-      // .load_req(load_req),
+  // loader #(
+  //     .PROG_ADDR_WIDTH(PROG_ADDR_WIDTH),
+  //     .PROG_LEN(PROG_LEN)
+  // ) loader_inst (
+  //     .clk(clk),
+  //     .resetn(resetn),
+  //     // .load_req(load_req),
 
-      .prog_we(loader_we),
-      .prog_addr(loader_addr),
-      .prog_wr(loader_wr),
-      .loaded(loaded)
-  );
+  //     .prog_we(loader_we),
+  //     .prog_addr(loader_addr),
+  //     .prog_wr(loader_wr),
+  //     .loaded(loaded)
+  // );
 
   localparam int SLOWDOWN = 0;  // wait 2^(SLOWDOWN+1) cycles when SLOWDOWN != 0. since each inst takes ~2 cycles, this slows by ~2^SLOWDOWN.
   logic [SLOWDOWN:0] slow_ctr = 0;
@@ -244,9 +253,11 @@ module cpu_core #(
       .data_out(_jump_rd)  // only lower PROG_ADDR_WIDTH bits used
   );
 
-  logic [7:0] last_inst;
+  // logic [7:0] last_inst;
 
   logic [14:0] zero_ptr;
+
+  logic [PROG_ADDR_WIDTH-1:0] load_ptr;
 
   // todo: edge case where we jump past program??
   logic use_jump_rd;
@@ -265,10 +276,14 @@ module cpu_core #(
 
     current_cell <= '0;
 
-    last_inst    <= '0;
+    // last_inst    <= '0;
     exec_count   <= '0;
 
     do_blink     <= 1'b0;
+
+    loaded       <= 1'b0;
+
+    load_ptr     <= '0;
 
     // LED_GRN_N    <= 1'b1;  // off
     // LED_RED_N    <= 1'b1;  // off
@@ -297,6 +312,7 @@ module cpu_core #(
       data_we  <= 1'b0;
       stack_we <= 1'b0;
       jump_we  <= 1'b0;
+      prog_we  <= 1'b0;
 
       tx_start <= 1'b0;
       rx_start <= 1'b0;
@@ -307,13 +323,58 @@ module cpu_core #(
       case (state_id)
         S_IDLE: begin
           executing <= 1'b0;
-          if (start_req && loaded) begin
+          if (loaded) begin
             do_reset();
             executing <= 1'b1;
 
             cpu_priority <= 1'b1;  // take control of data tape
             zero_ptr <= '0;
             state_id <= S_ZERO_DATA;
+          end else begin
+            state_id <= S_ZERO_PROG;
+          end
+        end
+
+        S_ZERO_PROG: begin
+          prog_we <= 1'b1;
+          iptr <= load_ptr;
+          prog_wr <= 8'h00;
+          load_ptr <= load_ptr + 1;
+
+          if (load_ptr == '1) begin
+            current_cell <= 8'd82;  // capital R for "ready"
+            tx_start     <= 1'b1;
+
+            iptr         <= '0;
+            load_ptr     <= '0;
+            rx_start     <= 1'b1;
+            state_id     <= S_SERLD_WAITBUSY;
+          end
+        end
+
+        S_SERLD_WAITBUSY: begin  // takes one cycle to assert rx_busy
+          // if (rx_busy)
+          state_id <= S_SERLD_RX;
+        end
+
+        S_SERLD_RX: begin
+          if (!rx_busy) begin  // wait until rx done
+            if (rx_data == 8'h04 || iptr == PROG_LEN) begin  // ctrl D
+              // done loading
+              iptr     <= '0;
+              load_ptr <= '0;
+              loaded   <= 1'b1;
+              state_id <= S_IDLE;
+            end else begin
+              prog_wr <= rx_data;
+              prog_we <= 1'b1;
+              // iptr     <= iptr + 1;
+              iptr <= load_ptr;
+              load_ptr <= load_ptr + 1;
+
+              rx_start <= 1'b1;  // start next rx
+              state_id <= S_SERLD_WAITBUSY;
+            end
           end
         end
 
@@ -439,7 +500,7 @@ module cpu_core #(
             default: state_id <= S_EXEC_WAIT;  // nop
           endcase
 
-          last_inst <= prog_rd;
+          // last_inst <= prog_rd;
 
           if (iptr < PROG_LEN) begin
             iptr <= use_jump_rd ? jump_rd + 1 : iptr + 1;
@@ -490,10 +551,10 @@ module cpu_core #(
           state_id     <= S_EXECUTE;
         end
 
-        S_STEP_WAIT: begin  // todo: just merge into exec wait.
-          // if we just executed . then wait for step_req before next fetch
-          state_id <= (last_inst == 8'h2E && !step_req) ? S_STEP_WAIT : S_EXEC_WAIT;
-        end
+        // S_STEP_WAIT: begin  // todo: just merge into exec wait.
+        //   // if we just executed . then wait for step_req before next fetch
+        //   state_id <= (last_inst == 8'h2E && !step_req) ? S_STEP_WAIT : S_EXEC_WAIT;
+        // end
 
         default: begin
           state_id <= S_IDLE;
