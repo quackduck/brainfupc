@@ -1,7 +1,6 @@
 `default_nettype none
 module cpu_core #(
-    parameter int PROG_ADDR_WIDTH = 14
-    // parameter logic [PROG_ADDR_WIDTH-1:0] PROG_LEN = 16383
+    parameter int PROG_ADDR_WIDTH = 14  // max prog len is 2^14 = 16384 insts
 ) (
     input logic clk,
 
@@ -217,10 +216,7 @@ module cpu_core #(
 
   always @(posedge clk or negedge resetn) begin : cpu_fsm
     if (!resetn) begin
-      do_blink     <= 1'b0;
-      cpu_priority <= '0;
-
-      state_id     <= S_IDLE;
+      state_id <= S_IDLE;
     end else begin
       // these get overridden as needed.
       data_we  <= 1'b0;
@@ -236,9 +232,12 @@ module cpu_core #(
 
       case (state_id)
         S_IDLE: begin
-          executing <= 1'b0;
-          load_ptr  <= '0;
-          state_id  <= S_ZERO_PROG;
+          do_blink     <= 1'b0;
+          cpu_priority <= '0;
+          executing    <= 1'b0;
+
+          load_ptr     <= '0;
+          state_id     <= S_ZERO_PROG;
         end
 
         S_ZERO_PROG: begin
@@ -273,11 +272,6 @@ module cpu_core #(
               iptr         <= '0;
               load_ptr     <= '0;
 
-              // do_reset();
-              executing    <= 1'b1;  // we even allow zero_data to be included in exec time.
-              current_cell <= '0;
-              exec_count   <= '0;
-
               cpu_priority <= 1'b1;  // take control of data tape
               dptr         <= '0;
               zero_ptr     <= '0;
@@ -308,6 +302,7 @@ module cpu_core #(
           zero_ptr <= '0;
           dptr <= '0;
           cpu_priority <= 1'b0;  // release data tape
+
           state_id <= S_PRE_ADDR;
         end
 
@@ -335,9 +330,13 @@ module cpu_core #(
           end
 
           if (iptr == '1) begin  // done preprocessing
-            iptr <= '0;
-            state_id <= S_EXEC_WAIT;
-            stack_ptr <= '0;
+            stack_ptr    <= '0;
+            iptr         <= '0;
+
+            executing    <= 1'b1;
+            current_cell <= '0;
+            exec_count   <= '0;
+            state_id     <= S_EXEC_WAIT;
           end
         end
 
