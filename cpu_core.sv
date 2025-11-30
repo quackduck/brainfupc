@@ -330,13 +330,14 @@ module cpu_core #(
           end
 
           if (iptr == '1) begin  // done preprocessing
-            stack_ptr    <= '0;
-            iptr         <= '0;
+            stack_ptr     <= '0;
+            iptr          <= '0;
+            jump_addr_reg <= '0;
 
-            executing    <= 1'b1;
-            current_cell <= '0;
-            exec_count   <= '0;
-            state_id     <= S_EXEC_WAIT;
+            executing     <= 1'b1;
+            current_cell  <= '0;
+            exec_count    <= '0;
+            state_id      <= S_EXEC_WAIT;
           end
         end
 
