@@ -9,7 +9,6 @@ SRCS = top.sv \
 	   cpu_core.sv \
 	   spram.sv \
 	   hvsync_generator.sv \
-	   loader.sv \
 	   transmitter.sv \
 	   receiver.sv
 

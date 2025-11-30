@@ -34,7 +34,7 @@ void stdout_write(const char* buf, ssize_t n) {
 
 void device_write(int fd, const char* buf, ssize_t n) {
     for (ssize_t i = 0; i < n; i++) {
-        usleep(1000); // 1 ms delay. picocom doesnt have this feature.
+        usleep(100); // 1 us delay. picocom doesnt have this feature.
         if (buf[i] == '\r') {
             write(fd, "\n", 1);
             continue;

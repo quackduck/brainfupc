@@ -9,14 +9,10 @@ module cpu_core #(
     output logic [ 7:0] vga_cell,
 
     input logic resetn,
-    input logic start_req,
     input logic step_req,
-    input logic fast_req,   // skip waiting for serial tx
-    // input logic load_req,
+    input logic fast_req,  // skip waiting for serial tx
+    // todo: add slow_req, and add back step_req.
 
-    input logic in_display_area,
-
-    output logic loaded,
     output logic executing,
 
     input  logic rxd,
@@ -32,7 +28,7 @@ module cpu_core #(
     S_ZERO_DATA,
     S_ZERO_PROG,
 
-    // S_SERLD_START,
+    // serial load states
     S_SERLD_RX,
     S_SERLD_WAITBUSY,
 
@@ -49,11 +45,12 @@ module cpu_core #(
     S_EXEC_WAIT,
     S_EXECUTE,
 
+    // io while running
     S_TX_OUT,
     S_RX_IN,
     S_RX_WAIT,
 
-    // writeback
+    // writeback and read. could likely be optimized.
     S_PTR_WRITEBACK,
     S_STEP_WAIT,
     S_PTR_READ_SETUP,
@@ -91,9 +88,6 @@ module cpu_core #(
   logic rx_busy;
   logic [7:0] rx_data;
 
-  // assign LED_GRN_N = ~(rx_data == 8'h0a);  // light green led when receiving newline
-  // assign LED_RED_N = ~(rx_data == 8'h0d);  // light red led when cr
-
   receiver #(
       .BAUD(BAUD),
       .CLOCK_FREQ(CLOCK_FREQ)
@@ -106,54 +100,12 @@ module cpu_core #(
       .rxd_async(rxd)
   );
 
-
-
-  // // logic rx_start;
-  // logic rx_busy;
-  // logic [7:0] rx_data;
-
-  // logic valid_out;
-
-  // receiver #(
-  //     .BAUD(BAUD),
-  //     .CLOCK_FREQ(CLOCK_FREQ)
-  // ) rx_inst (
-  //     .clk(clk),
-  //     .rst_n(resetn),
-  //     // .start(1),
-  //     .valid_out(valid_out),
-  //     .busy(rx_busy),
-  //     .data_out(rx_data),
-  //     .rxd(rxd)
-  // );
-
-  // logic tx_start;
-  // logic tx_busy;
-  // // assign tx_data = current_cell;
-
-  // transmitter #(
-  //     .BAUD(BAUD),
-  //     .CLOCK_FREQ(CLOCK_FREQ)
-  // ) tx_inst (
-  //     .clk(clk),
-  //     .rst_n(resetn),
-  //     .start(valid_out),
-  //     .busy(tx_busy),
-  //     .data_in(rx_data),
-  //     .txd(txd)
-  // );
-
-
   logic [PROG_ADDR_WIDTH-1:0] iptr;  // owned by cpu
   logic [                7:0] prog_rd;  // owned by cpu
 
 
   logic [               15:0] _prog_rd;
   assign prog_rd = _prog_rd[7:0];  // only lower 8 bits used.
-
-  // logic [PROG_ADDR_WIDTH-1:0] loader_addr;  // owned by loader
-  // logic [                7:0] loader_wr;  // owned by loader
-  // logic                       loader_we;  // owned by loader
 
   logic [7:0] prog_wr;
   logic prog_we;
@@ -165,20 +117,6 @@ module cpu_core #(
       .data_in({8'h00, prog_wr}),
       .data_out(_prog_rd)
   );
-
-  // loader #(
-  //     .PROG_ADDR_WIDTH(PROG_ADDR_WIDTH),
-  //     .PROG_LEN(PROG_LEN)
-  // ) loader_inst (
-  //     .clk(clk),
-  //     .resetn(resetn),
-  //     // .load_req(load_req),
-
-  //     .prog_we(loader_we),
-  //     .prog_addr(loader_addr),
-  //     .prog_wr(loader_wr),
-  //     .loaded(loaded)
-  // );
 
   localparam int SLOWDOWN = 0;  // wait 2^(SLOWDOWN+1) cycles when SLOWDOWN != 0. since each inst takes ~2 cycles, this slows by ~2^SLOWDOWN.
   logic [SLOWDOWN:0] slow_ctr = 0;
@@ -253,8 +191,6 @@ module cpu_core #(
       .data_out(_jump_rd)  // only lower PROG_ADDR_WIDTH bits used
   );
 
-  // logic [7:0] last_inst;
-
   logic [14:0] zero_ptr;
 
   logic [PROG_ADDR_WIDTH-1:0] load_ptr;
@@ -276,14 +212,9 @@ module cpu_core #(
 
     current_cell <= '0;
 
-    // last_inst    <= '0;
     exec_count   <= '0;
 
     do_blink     <= 1'b0;
-
-    loaded       <= 1'b0;
-
-    load_ptr     <= '0;
 
     // LED_GRN_N    <= 1'b1;  // off
     // LED_RED_N    <= 1'b1;  // off
@@ -323,16 +254,8 @@ module cpu_core #(
       case (state_id)
         S_IDLE: begin
           executing <= 1'b0;
-          if (loaded) begin
-            do_reset();
-            executing <= 1'b1;
-
-            cpu_priority <= 1'b1;  // take control of data tape
-            zero_ptr <= '0;
-            state_id <= S_ZERO_DATA;
-          end else begin
-            state_id <= S_ZERO_PROG;
-          end
+          load_ptr  <= '0;
+          state_id  <= S_ZERO_PROG;
         end
 
         S_ZERO_PROG: begin
@@ -363,8 +286,12 @@ module cpu_core #(
               // done loading
               iptr     <= '0;
               load_ptr <= '0;
-              loaded   <= 1'b1;
-              state_id <= S_IDLE;
+              do_reset();
+              executing <= 1'b1; // pessimistic. we even allow zero data to be included in exec time.
+
+              cpu_priority <= 1'b1;  // take control of data tape
+              zero_ptr <= '0;
+              state_id <= S_ZERO_DATA;
             end else begin
               prog_wr <= rx_data;
               prog_we <= 1'b1;
