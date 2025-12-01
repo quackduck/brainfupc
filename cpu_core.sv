@@ -214,6 +214,8 @@ module cpu_core #(
     end
   end
 
+  logic [PROG_ADDR_WIDTH-1:0] temp_iptr;  // just a temp var
+
   always @(posedge clk or negedge resetn) begin : cpu_fsm
     if (!resetn) begin
       state_id <= S_IDLE;
@@ -235,6 +237,8 @@ module cpu_core #(
           do_blink     <= 1'b0;
           cpu_priority <= '0;
           executing    <= 1'b0;
+
+          LED_RED_N    <= 1'b1;
 
           load_ptr     <= '0;
           state_id     <= S_ZERO_PROG;
@@ -331,9 +335,9 @@ module cpu_core #(
 
           if (iptr == '1) begin  // done preprocessing
             stack_ptr     <= '0;
+
             iptr          <= '0;
             jump_addr_reg <= '0;
-
             executing     <= 1'b1;
             current_cell  <= '0;
             exec_count    <= '0;
@@ -362,6 +366,8 @@ module cpu_core #(
           jump_we <= 1'b1;
 
           state_id <= S_PRE_JUMP_DONE;
+          // iptr <= iptr + 1;
+          // state_id <= S_PRE_ADDR;
         end
 
         S_PRE_JUMP_DONE: begin
@@ -373,6 +379,7 @@ module cpu_core #(
 
         S_EXEC_WAIT: begin
           state_id <= SLOWDOWN == 0 ? S_EXECUTE : S_SLOWDOWN;
+          if (!executing) state_id <= S_IDLE;  // finished
         end
 
         S_SLOWDOWN: begin // doesnt get triggered on PTR_READ_LATCH but thats fine, we just want a slowdown on most insts.
@@ -391,6 +398,7 @@ module cpu_core #(
             8'h3E, 8'h3C: begin  // > < : inc/dec data pointer
               dptr_next <= prog_rd == 8'h3E ? dptr + 1 : dptr - 1;
               cpu_priority <= 1'b1;  // take control of data tape
+              // todo: if wanted, by tracking if current_cell changed we can skip write and schedule read, saving one cycle sometimes
               state_id <= S_PTR_WRITEBACK;  // writeback scheduled
             end
 
@@ -422,22 +430,31 @@ module cpu_core #(
 
           // last_inst <= prog_rd;
 
-          if (iptr < '1) begin
-            iptr <= use_jump_rd ? jump_rd + 1 : iptr + 1;
-            jump_addr_reg <= use_jump_rd ? jump_rd + 1 : iptr + 1;
-          end else begin
-            // reached end: stop executing
-            executing <= 1'b0;  // let this instruction execute.
-            // state_id  <= S_IDLE;
-          end
+          // if (iptr != '1) begin
+          // if ((iptr + 1) != '0) begin
+          // if ((use_jump_rd ? jump_rd : iptr) != '1) begin  // works.
+          // if (use_jump_rd) begin
+          //   LED_RED_N <= 1'b0;
+          // end
 
-          if (~executing) begin  // came back from last instruction
-            state_id <= S_IDLE;
+          temp_iptr = use_jump_rd ? jump_rd + 1 : iptr + 1;  // blocking!!!
+          // if (((use_jump_rd ? jump_rd : iptr) + 1) != '0) begin  // works.
+          // if (((use_jump_rd ? jump_rd : iptr) + 1) != '0) begin
+          // if (((use_jump_rd ? jump_rd : iptr) + 1) != '0) begin
+          // if ((use_jump_rd ? (jump_rd + 1) : (iptr + 1)) != '0) begin
+          if (temp_iptr != 0) begin
+            // iptr <= use_jump_rd ? jump_rd + 1 : iptr + 1;
+            // jump_addr_reg <= use_jump_rd ? jump_rd + 1 : iptr + 1;
+            iptr <= temp_iptr;
+            jump_addr_reg <= temp_iptr;
+          end else begin
+            // reached end
+            executing <= 1'b0;  // let this instruction execute, but stop when back to exec_wait
           end
         end
 
         S_TX_OUT: begin
-          if (!tx_busy) begin  // done with prev tx?
+          if (!tx_busy) begin  // wait until done with prev tx
             tx_start <= 1'b1;
             state_id <= S_EXEC_WAIT;
           end
