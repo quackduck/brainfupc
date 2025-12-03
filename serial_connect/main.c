@@ -18,7 +18,7 @@ void restore_terminal(void) { // doesnt actually run on signals..
 
 void stdout_write(const char* buf, ssize_t n) {
     for (ssize_t i = 0; i < n; i++) {
-        if (buf[i] == '\r' || buf[i] == '\n') {
+        if (buf[i] == '\r' || buf[i] == '\n' || buf[i] == 4) { // ctrl d as newline
             write(STDOUT_FILENO, "\r\n", 2);
             continue;
         }

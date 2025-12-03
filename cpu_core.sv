@@ -31,15 +31,14 @@ module cpu_core #(
 
     // serial load states
     S_SERLD_RX,
-    S_SERLD_WAITBUSY,
+
+    S_WAIT_ONE,  // generic one cycle wait. returns to after_wait state.
 
     // preprocess states
-    S_PRE_ADDR,
     S_PRE_READ,
-    S_PRE_STACK_WAIT,
-    S_PRE_STACK_READ,
+    S_PRE_STACK_INCR,
     S_PRE_JUMP_W1,
-    S_PRE_JUMP_DONE,
+    S_PRE_JUMP_W2,
 
     // running
     S_SLOWDOWN,
@@ -48,18 +47,19 @@ module cpu_core #(
 
     // io while running
     S_TX_OUT,
-    S_RX_IN,
+    // S_RX_IN,
     S_RX_WAIT,
 
     // writeback and read. could likely be optimized.
     S_PTR_WRITEBACK,
-    S_STEP_WAIT,
+    // S_STEP_WAIT,
     S_PTR_READ_SETUP,
-    S_PTR_READ_WAIT,
+    // S_PTR_READ_WAIT,
     S_PTR_READ_LATCH
 
   } state_t;
-  logic [4:0] state_id;
+  state_t state_id;
+  state_t after_wait;
 
 
   // localparam integer BAUD = 9600;
@@ -120,7 +120,7 @@ module cpu_core #(
   );
 
   localparam int SLOWDOWN = 0;  // wait 2^(SLOWDOWN+1) cycles when SLOWDOWN != 0. since each inst takes ~2 cycles, this slows by ~2^SLOWDOWN.
-  logic [SLOWDOWN:0] slow_ctr = 0;
+  logic [SLOWDOWN:0] slow_ctr;
 
   // brainfuck data tape
 
@@ -237,20 +237,22 @@ module cpu_core #(
           do_blink     <= 1'b0;
           cpu_priority <= '0;
           executing    <= 1'b0;
-
-          LED_RED_N    <= 1'b1;
+          slow_ctr     <= '0;
 
           load_ptr     <= '0;
           state_id     <= S_ZERO_PROG;
         end
 
-        S_ZERO_PROG: begin
-          prog_we <= 1'b1;
-          iptr <= load_ptr;
-          prog_wr <= 8'h00;
+        S_ZERO_PROG: begin  // todo: simplify and remove this by making serld zero rest of prog
+          // prog[load_ptr++] = 0
+          prog_we  <= 1'b1;
+          iptr     <= load_ptr;
           load_ptr <= load_ptr + 1;
+          prog_wr  <= 8'h00;
 
+          // if (load_ptr == len-1) // wrote to last addr
           if (load_ptr == '1) state_id <= S_ZPROG_END;
+          // if (&load_ptr) state_id <= S_ZPROG_END;
         end
 
         S_ZPROG_END: begin
@@ -261,16 +263,17 @@ module cpu_core #(
           iptr         <= '0;
           load_ptr     <= '0;
           rx_start     <= 1'b1;
-          state_id     <= S_SERLD_WAITBUSY;
+
+          state_id     <= S_WAIT_ONE;
+          after_wait   <= S_SERLD_RX;
         end
 
-        S_SERLD_WAITBUSY: begin  // takes one cycle to assert rx_busy
-          // if (rx_busy)
-          state_id <= S_SERLD_RX;
+        S_WAIT_ONE: begin
+          state_id <= after_wait;
         end
 
-        S_SERLD_RX: begin
-          if (!rx_busy || iptr == '1) begin  // wait until rx done
+        S_SERLD_RX: begin  // todo: simplify this guy.. ways i can think of need extra states tho
+          if (!rx_busy || iptr == '1) begin  // wait until rx done, passthrough if we just wrote last addr.
             if (rx_data == 8'h04 || iptr == '1) begin  // ctrl D. iptr holds addr that has just been written to.
               // done loading
               iptr         <= '0;
@@ -281,56 +284,54 @@ module cpu_core #(
               zero_ptr     <= '0;
               state_id     <= S_ZERO_DATA;
             end else begin
-              prog_wr <= rx_data;
-              prog_we <= 1'b1;
-              // iptr     <= iptr + 1;
-              iptr <= load_ptr;
+              // prog[lptr++] = rx
+              prog_we  <= 1'b1;
+              iptr     <= load_ptr;
               load_ptr <= load_ptr + 1;
+              prog_wr  <= rx_data;
 
               if (load_ptr != '1) rx_start <= 1'b1;  // start next rx
-              state_id <= S_SERLD_WAITBUSY;
+
+              state_id   <= S_WAIT_ONE;  // takes one cycle to assert rx_busy
+              after_wait <= S_SERLD_RX;
             end
           end
         end
 
         S_ZERO_DATA: begin
-          data_we <= 1'b1;
-          dptr <= zero_ptr;
-          data_wr <= 8'h00;
-          zero_ptr <= zero_ptr + 1;  // todo: check if this indirection is actually needed
+          // data[zptr++] = 0
+          data_we  <= 1'b1;
+          dptr     <= zero_ptr;
+          zero_ptr <= zero_ptr + 1;
+          data_wr  <= 8'h00;
 
+          // if (zptr == len-1) // wrote to last addr
           if (zero_ptr == '1) state_id <= S_ZDATA_END;
         end
 
         S_ZDATA_END: begin
-          zero_ptr <= '0;
-          dptr <= '0;
+          zero_ptr     <= '0;
+          dptr         <= '0;
           cpu_priority <= 1'b0;  // release data tape
 
-          state_id <= S_PRE_ADDR;
-        end
-
-
-        S_PRE_ADDR: begin
-          if (prog_rd == 8'h5B)
-            stack_ptr <= stack_ptr + 1; // if we just wrote to stack, increment pointer. somewhat ugly, could replace with a stack_ptr_next or smth.
-
-          state_id <= S_PRE_READ;
+          stack_ptr    <= '0;
+          state_id     <= S_PRE_READ;
         end
 
         S_PRE_READ: begin
-          if (prog_rd == 8'h5B) begin  // [
+          if (prog_rd == 8'h5B) begin  // [ : stack[sptr++] = iptr
             stack_wr <= iptr;
             stack_we <= 1'b1;
 
-            iptr <= iptr + 1;
-            state_id <= S_PRE_ADDR;
-          end else if (prog_rd == 8'h5D) begin  // ]
-            stack_ptr <= stack_ptr - 1;  // setup stack pop
-            state_id  <= S_PRE_STACK_WAIT;
+            state_id <= S_PRE_STACK_INCR;
+          end else if (prog_rd == 8'h5D) begin  // ] : match = stack[--sptr], jump[iptr] = match, jump[match] = iptr
+            stack_ptr  <= stack_ptr - 1;  // setup stack pop
+            state_id   <= S_WAIT_ONE;
+            after_wait <= S_PRE_JUMP_W1;
           end else begin
-            iptr <= iptr + 1;
-            state_id <= S_PRE_ADDR;
+            iptr       <= iptr + 1;
+            state_id   <= S_WAIT_ONE;
+            after_wait <= S_PRE_READ;
           end
 
           if (iptr == '1) begin  // done preprocessing
@@ -345,37 +346,34 @@ module cpu_core #(
           end
         end
 
-        S_PRE_STACK_WAIT: begin
-          state_id <= S_PRE_STACK_READ;
-        end
+        S_PRE_STACK_INCR: begin  // could be replaced by use of a separate pointer.
+          stack_ptr  <= stack_ptr + 1;
+          iptr       <= iptr + 1;
 
-        S_PRE_STACK_READ: begin
-          // stack_rd is the [ address
-          // write jump_table[stack_rd] = iptr (address of ])
-          jump_addr_reg <= stack_rd;
-          jump_wr <= iptr;
-          jump_we <= 1'b1;
-
-          state_id <= S_PRE_JUMP_W1;
+          state_id   <= S_WAIT_ONE;
+          after_wait <= S_PRE_READ;
         end
 
         S_PRE_JUMP_W1: begin
+          // stack_rd is the [ address
+          // write jump_table[stack_rd] = iptr (address of ])
+          jump_addr_reg <= stack_rd;
+          jump_wr       <= iptr;
+          jump_we       <= 1'b1;
+
+          state_id      <= S_PRE_JUMP_W2;
+        end
+
+        S_PRE_JUMP_W2: begin
           // write the reverse mapping: jump_table[iptr] = stack_rd
           jump_addr_reg <= iptr;
-          jump_wr <= stack_rd;
-          jump_we <= 1'b1;
+          jump_wr       <= stack_rd;
+          jump_we       <= 1'b1;
 
-          state_id <= S_PRE_JUMP_DONE;
-          // iptr <= iptr + 1;
-          // state_id <= S_PRE_ADDR;
+          iptr          <= iptr + 1;
+          state_id      <= S_WAIT_ONE;
+          after_wait    <= S_PRE_READ;
         end
-
-        S_PRE_JUMP_DONE: begin
-          // advance to next instruction after ']'
-          iptr <= iptr + 1;
-          state_id <= S_PRE_ADDR;
-        end
-
 
         S_EXEC_WAIT: begin
           state_id <= SLOWDOWN == 0 ? S_EXECUTE : S_SLOWDOWN;
@@ -383,12 +381,9 @@ module cpu_core #(
         end
 
         S_SLOWDOWN: begin // doesnt get triggered on PTR_READ_LATCH but thats fine, we just want a slowdown on most insts.
-          if (slow_ctr == '1) begin
-            slow_ctr <= '0;
-            state_id <= S_EXECUTE;
-          end else begin
-            slow_ctr <= slow_ctr + 1;
-          end
+          if (slow_ctr == '1) state_id <= S_EXECUTE;
+
+          slow_ctr <= slow_ctr + 1;
         end
 
         S_EXECUTE: begin  // can be reached either from EXEC_WAIT or PTR_READ_LATCH
@@ -396,15 +391,15 @@ module cpu_core #(
           case (prog_rd)
 
             8'h3E, 8'h3C: begin  // > < : inc/dec data pointer
-              dptr_next <= prog_rd == 8'h3E ? dptr + 1 : dptr - 1;
+              dptr_next    <= prog_rd == 8'h3E ? dptr + 1 : dptr - 1;
               cpu_priority <= 1'b1;  // take control of data tape
               // todo: if wanted, by tracking if current_cell changed we can skip write and schedule read, saving one cycle sometimes
-              state_id <= S_PTR_WRITEBACK;  // writeback scheduled
+              state_id     <= S_PTR_WRITEBACK;  // writeback scheduled
             end
 
             8'h2B, 8'h2D: begin  // + - : inc/dec current cell
               current_cell <= prog_rd == 8'h2B ? current_cell + 1 : current_cell - 1;
-              state_id <= S_EXEC_WAIT;
+              state_id     <= S_EXEC_WAIT;
             end
 
             8'h2E: begin  // .
@@ -417,8 +412,10 @@ module cpu_core #(
             end
 
             8'h2C: begin  // ,
-              rx_start <= 1'b1;
-              state_id <= S_RX_IN;
+              rx_start   <= 1'b1;
+              // state_id <= S_RX_IN;
+              state_id   <= S_WAIT_ONE;
+              after_wait <= S_RX_WAIT;
             end
 
             8'h5B, 8'h5D: begin  // [ ] : jumps handled in use_jump_rd logic
@@ -428,24 +425,9 @@ module cpu_core #(
             default: state_id <= S_EXEC_WAIT;  // nop
           endcase
 
-          // last_inst <= prog_rd;
-
-          // if (iptr != '1) begin
-          // if ((iptr + 1) != '0) begin
-          // if ((use_jump_rd ? jump_rd : iptr) != '1) begin  // works.
-          // if (use_jump_rd) begin
-          //   LED_RED_N <= 1'b0;
-          // end
-
-          temp_iptr = use_jump_rd ? jump_rd + 1 : iptr + 1;  // blocking!!!
-          // if (((use_jump_rd ? jump_rd : iptr) + 1) != '0) begin  // works.
-          // if (((use_jump_rd ? jump_rd : iptr) + 1) != '0) begin
-          // if (((use_jump_rd ? jump_rd : iptr) + 1) != '0) begin
-          // if ((use_jump_rd ? (jump_rd + 1) : (iptr + 1)) != '0) begin
-          if (temp_iptr != 0) begin
-            // iptr <= use_jump_rd ? jump_rd + 1 : iptr + 1;
-            // jump_addr_reg <= use_jump_rd ? jump_rd + 1 : iptr + 1;
-            iptr <= temp_iptr;
+          temp_iptr = use_jump_rd ? jump_rd + 1 : iptr + 1;  // blocking!!! temp storage.
+          if (temp_iptr != '0) begin  // if next inst isnt first
+            iptr          <= temp_iptr;
             jump_addr_reg <= temp_iptr;
           end else begin
             // reached end
@@ -460,9 +442,9 @@ module cpu_core #(
           end
         end
 
-        S_RX_IN: begin  // we have to wait one cycle for busy to get asserted
-          state_id <= S_RX_WAIT;
-        end
+        // S_RX_IN: begin  // we have to wait one cycle for busy to get asserted
+        //   state_id <= S_RX_WAIT;
+        // end
 
         S_RX_WAIT: begin
           if (!rx_busy) begin // done with curr rx? situation is asymmetric: max rx speeds are much lower.
@@ -478,12 +460,10 @@ module cpu_core #(
         end
 
         S_PTR_READ_SETUP: begin
-          dptr     <= dptr_next;  // request new address read
-          state_id <= S_PTR_READ_WAIT;
-        end
+          dptr       <= dptr_next;  // request new address read
 
-        S_PTR_READ_WAIT: begin
-          state_id <= S_PTR_READ_LATCH;
+          state_id   <= S_WAIT_ONE;
+          after_wait <= S_PTR_READ_LATCH;
         end
 
         S_PTR_READ_LATCH: begin
