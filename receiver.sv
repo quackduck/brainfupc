@@ -5,8 +5,7 @@ module receiver #(
     input logic clk,
     input logic rst_n,
 
-    input logic start,  // receive next byte.
-    output logic busy,  // goes low when received.
+    output logic valid,  // high for one cycle when data_out is valid
     output logic [7:0] data_out,
 
     // output logic cts_n,  // active low "clear to send"
@@ -29,7 +28,7 @@ module receiver #(
   logic [2:0] bit_idx;
   logic [7:0] register;
 
-  assign busy = (state != IDLE);
+  // assign busy = (state != IDLE);
 
 
   // logic rxd_async2, rxd;
@@ -50,20 +49,17 @@ module receiver #(
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-      state    <= IDLE;
-      baud_cnt <= 0;
-      bit_idx  <= 0;
-      //   cts_n    <= 1'b1; // not clear to send
-      register <= 8'd0;
+      state <= IDLE;
     end else begin
+      valid <= 1'b0;  // default
+
       case (state)
         IDLE: begin
           baud_cnt <= 0;
-          bit_idx  <= 0;
-          if (start) begin
-            // cts_n <= 1'b0;  // clear to send
-            state <= START_BIT;
-          end
+          bit_idx  <= '0;
+          register <= '0;
+          data_out <= '0;
+          state    <= START_BIT;
         end
 
         START_BIT: begin
@@ -97,7 +93,11 @@ module receiver #(
           if (baud_cnt == BIT_PERIOD - 2) begin
             baud_cnt <= 0;
             if (bit_idx == 3'd7) begin
-              bit_idx <= 0;
+              bit_idx <= '0;
+
+              data_out <= register;
+              valid    <= 1'b1; // valid for one cycle at start of stop bit.
+
               state   <= STOP_BIT;
             end else begin
               bit_idx <= bit_idx + 1;
@@ -109,24 +109,30 @@ module receiver #(
         STOP_BIT: begin  // we are in the middle of the stop bit now!!!
           // should we check for the stop bit?
 
-          data_out <= register;
-
           // ignoring the timing is a hack so that we can receive bytes back-to-back even if cpu takes a couple cycles to process received bytes.
           // at 1.5 Mbaud, we'll be saving ~8 cycles which is ~4 instructions of time.
-          // nvm lets not ignore for now.
+          // at 2.125 Mbaud, we save 5-6 cycles.
 
-          if (baud_cnt == (BIT_PERIOD / 2) - 1) begin
-            baud_cnt <= 0;
-            state    <= IDLE;
-          end else baud_cnt <= baud_cnt + 1;
+          // if (baud_cnt == (BIT_PERIOD / 2) - 1) begin
+          // baud_cnt <= 0;
+          state <= IDLE;
+          // end else baud_cnt <= baud_cnt + 1;
         end
 
-        default: ;
+        default: state <= IDLE;
       endcase
     end
   end
 
 endmodule
+
+
+
+
+
+
+
+
 
 
 

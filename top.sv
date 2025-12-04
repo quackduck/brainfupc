@@ -114,6 +114,7 @@ module top (
       .resetn       (resetn),
       .step_req     (1'b0),
       .fast_req     (db_btn3),        // hold to skip waiting for tx
+      .slow_req     (db_btn1),        // hold to slow down
       // .load_req       (btn3_pulse),
       // .loaded         (loaded),
       .executing    (executing),

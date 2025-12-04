@@ -8,6 +8,9 @@
 #include <IOKit/serial/ioss.h>
 
 speed_t baud = 2125000;
+// speed_t baud = 9600;
+// speed_t baud = 1500000;
+// speed_t baud = 115200;
 
 static struct termios orig_tio;
 

@@ -10,7 +10,8 @@ module cpu_core #(
     input logic resetn,
     input logic step_req,
     input logic fast_req,  // skip waiting for serial tx
-    // todo: add slow_req, and add back step_req.
+    input logic slow_req,
+    // todo: add step_req?
 
     output logic executing,
 
@@ -63,6 +64,7 @@ module cpu_core #(
 
 
   // localparam integer BAUD = 9600;
+  // localparam integer BAUD = 115200;
   // localparam integer BAUD = 1_500_000;  // exactly 17 clock cycles.
   // localparam integer BAUD = 1593750;  // 16 cycles at 25.5MHz
   localparam integer BAUD = 2125000;  // 12 cycles at 25.5MHz
@@ -71,7 +73,6 @@ module cpu_core #(
   logic tx_start;
   logic tx_busy;
   logic [7:0] tx_data;
-  assign tx_data = current_cell;
 
   transmitter #(
       .BAUD(BAUD),
@@ -85,8 +86,9 @@ module cpu_core #(
       .txd(txd)
   );
 
-  logic rx_start;
-  logic rx_busy;
+  // logic rx_start;
+  // logic rx_busy;
+  logic rx_valid;
   logic [7:0] rx_data;
 
   receiver #(
@@ -95,10 +97,10 @@ module cpu_core #(
   ) rx_inst (
       .clk(clk),
       .rst_n(resetn),
-      .start(rx_start),
-      .busy(rx_busy),
+      .valid(rx_valid),
       .data_out(rx_data),
       .rxd_async(rxd)
+      // .ledn(LED_RED_N)
   );
 
   logic [PROG_ADDR_WIDTH-1:0] iptr;  // owned by cpu
@@ -119,7 +121,7 @@ module cpu_core #(
       .data_out(_prog_rd)
   );
 
-  localparam int SLOWDOWN = 0;  // wait 2^(SLOWDOWN+1) cycles when SLOWDOWN != 0. since each inst takes ~2 cycles, this slows by ~2^SLOWDOWN.
+  localparam int SLOWDOWN = 10;  // wait 2^(SLOWDOWN+1) cycles when SLOWDOWN != 0. since each inst takes ~2 cycles, this slows by ~2^SLOWDOWN.
   logic [SLOWDOWN:0] slow_ctr;
 
   // brainfuck data tape
@@ -184,10 +186,12 @@ module cpu_core #(
   logic [               15:0] _jump_rd;
   assign jump_rd = _jump_rd[PROG_ADDR_WIDTH-1:0];
 
+  logic jmp_attach_iptr;
+
   spram jump_table (
       .clk(clk),
-      .we(jump_we ? 4'b1111 : 4'b0000),
-      .addr(jump_addr_reg),
+      .we(jmp_attach_iptr ? 4'b0000 : jump_we ? 4'b1111 : 4'b0000),
+      .addr(jmp_attach_iptr ? iptr : jump_addr_reg),
       .data_in({{(16 - PROG_ADDR_WIDTH) {1'b0}}, jump_wr}),
       .data_out(_jump_rd)  // only lower PROG_ADDR_WIDTH bits used
   );
@@ -221,21 +225,23 @@ module cpu_core #(
       state_id <= S_IDLE;
     end else begin
       // these get overridden as needed.
-      data_we  <= 1'b0;
-      stack_we <= 1'b0;
-      jump_we  <= 1'b0;
-      prog_we  <= 1'b0;
+      data_we   <= 1'b0;
+      stack_we  <= 1'b0;
+      jump_we   <= 1'b0;
+      prog_we   <= 1'b0;
 
-      tx_start <= 1'b0;
-      rx_start <= 1'b0;
+      tx_start  <= 1'b0;
 
       // LED_GRN_N <= 1'b1;  // off
-      // LED_RED_N <= 1'b1;  // off
+      LED_RED_N <= 1'b1;  // off
+
+      // i've tried to make it so each state preps for the next state when it ends.
+      // for most states i separate a state's cleanup and prep using a newline.
 
       case (state_id)
         S_IDLE: begin
-          do_blink     <= 1'b0;
-          cpu_priority <= '0;
+          do_blink     <= 1'b0;  // helpful for debugging.
+          cpu_priority <= 1'b0;  // set early so vga can use data tape.
           executing    <= 1'b0;
           slow_ctr     <= '0;
 
@@ -256,16 +262,12 @@ module cpu_core #(
         end
 
         S_ZPROG_END: begin
-          // todo: less tacky (rn we have current_cell hooked up to tx directly.)
-          current_cell <= 8'd82;  // capital R for "ready".
-          tx_start     <= 1'b1;
+          tx_data  <= 8'd82;  // capital R for "ready".
+          tx_start <= 1'b1;
 
-          iptr         <= '0;
-          load_ptr     <= '0;
-          rx_start     <= 1'b1;
-
-          state_id     <= S_WAIT_ONE;
-          after_wait   <= S_SERLD_RX;
+          iptr     <= '0;
+          load_ptr <= '0;
+          state_id <= S_SERLD_RX;
         end
 
         S_WAIT_ONE: begin
@@ -273,7 +275,7 @@ module cpu_core #(
         end
 
         S_SERLD_RX: begin  // todo: simplify this guy.. ways i can think of need extra states tho
-          if (!rx_busy || iptr == '1) begin  // wait until rx done, passthrough if we just wrote last addr.
+          if (rx_valid || iptr == '1) begin  // wait until rx done, passthrough if we just wrote last addr.
             if (rx_data == 8'h04 || iptr == '1) begin  // ctrl D. iptr holds addr that has just been written to.
               // done loading
               iptr         <= '0;
@@ -289,11 +291,6 @@ module cpu_core #(
               iptr     <= load_ptr;
               load_ptr <= load_ptr + 1;
               prog_wr  <= rx_data;
-
-              if (load_ptr != '1) rx_start <= 1'b1;  // start next rx
-
-              state_id   <= S_WAIT_ONE;  // takes one cycle to assert rx_busy
-              after_wait <= S_SERLD_RX;
             end
           end
         end
@@ -310,12 +307,13 @@ module cpu_core #(
         end
 
         S_ZDATA_END: begin
-          zero_ptr     <= '0;
-          dptr         <= '0;
-          cpu_priority <= 1'b0;  // release data tape
+          zero_ptr        <= '0;
+          dptr            <= '0;
+          cpu_priority    <= 1'b0;  // release data tape
 
-          stack_ptr    <= '0;
-          state_id     <= S_PRE_READ;
+          stack_ptr       <= '0;
+          jmp_attach_iptr <= 1'b0;  // make iptr and jump_addr_reg separate
+          state_id        <= S_PRE_READ;
         end
 
         S_PRE_READ: begin
@@ -335,21 +333,21 @@ module cpu_core #(
           end
 
           if (iptr == '1) begin  // done preprocessing
-            stack_ptr     <= '0;
+            stack_ptr       <= '0;
 
-            iptr          <= '0;
-            jump_addr_reg <= '0;
-            executing     <= 1'b1;
-            current_cell  <= '0;
-            exec_count    <= '0;
-            state_id      <= S_EXEC_WAIT;
+            iptr            <= '0;
+            jmp_attach_iptr <= 1'b1;  // iptr now addresses jump table.
+            executing       <= 1'b1;
+            current_cell    <= '0;
+            exec_count      <= '0;
+            state_id        <= S_EXEC_WAIT;
           end
         end
 
         S_PRE_STACK_INCR: begin  // could be replaced by use of a separate pointer.
           stack_ptr  <= stack_ptr + 1;
-          iptr       <= iptr + 1;
 
+          iptr       <= iptr + 1;
           state_id   <= S_WAIT_ONE;
           after_wait <= S_PRE_READ;
         end
@@ -376,21 +374,30 @@ module cpu_core #(
         end
 
         S_EXEC_WAIT: begin
-          state_id <= SLOWDOWN == 0 ? S_EXECUTE : S_SLOWDOWN;
+          state_id <= slow_req ? S_SLOWDOWN : S_EXECUTE;
+
           if (!executing) state_id <= S_IDLE;  // finished
         end
 
         S_SLOWDOWN: begin // doesnt get triggered on PTR_READ_LATCH but thats fine, we just want a slowdown on most insts.
-          if (slow_ctr == '1) state_id <= S_EXECUTE;
-
-          slow_ctr <= slow_ctr + 1;
+          if (slow_req) begin
+            slow_ctr <= slow_ctr + 1;
+            if (slow_ctr == '1) state_id <= S_EXECUTE;
+          end else begin
+            slow_ctr <= '0;
+            state_id <= S_EXECUTE;
+          end
         end
 
         S_EXECUTE: begin  // can be reached either from EXEC_WAIT or PTR_READ_LATCH
+
+          // LED_RED_N  <= 1'b0;  // light red at end.
+
           exec_count <= exec_count + 1;
           case (prog_rd)
 
             8'h3E, 8'h3C: begin  // > < : inc/dec data pointer
+              LED_RED_N    <= 1'b0;  // light red on data pointer move
               dptr_next    <= prog_rd == 8'h3E ? dptr + 1 : dptr - 1;
               cpu_priority <= 1'b1;  // take control of data tape
               // todo: if wanted, by tracking if current_cell changed we can skip write and schedule read, saving one cycle sometimes
@@ -406,16 +413,14 @@ module cpu_core #(
               if (!fast_req) begin
                 state_id <= S_TX_OUT;
               end else begin  // skip the wait
-                tx_start <= 1'b1;  // tx is hooked up to current_cell.
+                tx_start <= 1'b1;
+                tx_data  <= current_cell;
                 state_id <= S_EXEC_WAIT;
               end
             end
 
             8'h2C: begin  // ,
-              rx_start   <= 1'b1;
-              // state_id <= S_RX_IN;
-              state_id   <= S_WAIT_ONE;
-              after_wait <= S_RX_WAIT;
+              state_id <= S_RX_WAIT;
             end
 
             8'h5B, 8'h5D: begin  // [ ] : jumps handled in use_jump_rd logic
@@ -427,8 +432,7 @@ module cpu_core #(
 
           temp_iptr = use_jump_rd ? jump_rd + 1 : iptr + 1;  // blocking!!! temp storage.
           if (temp_iptr != '0) begin  // if next inst isnt first
-            iptr          <= temp_iptr;
-            jump_addr_reg <= temp_iptr;
+            iptr <= temp_iptr;
           end else begin
             // reached end
             executing <= 1'b0;  // let this instruction execute, but stop when back to exec_wait
@@ -438,6 +442,7 @@ module cpu_core #(
         S_TX_OUT: begin
           if (!tx_busy) begin  // wait until done with prev tx
             tx_start <= 1'b1;
+            tx_data  <= current_cell;
             state_id <= S_EXEC_WAIT;
           end
         end
@@ -447,7 +452,7 @@ module cpu_core #(
         // end
 
         S_RX_WAIT: begin
-          if (!rx_busy) begin // done with curr rx? situation is asymmetric: max rx speeds are much lower.
+          if (rx_valid) begin
             current_cell <= rx_data;
             state_id     <= S_EXEC_WAIT;
           end
