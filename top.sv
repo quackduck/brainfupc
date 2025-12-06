@@ -105,7 +105,7 @@ module top (
   logic [14:0] vga_data_addr;
   logic [7:0] vga_cell;
 
-  logic [63:0] exec_count;  // display somewhere?
+  // logic [63:0] exec_count;  // display somewhere?
 
   cpu_core core (
       .clk          (clk_pixel),
@@ -120,7 +120,7 @@ module top (
       .executing    (executing),
       // .state_id       (state_id),
 
-      .exec_count(exec_count),
+      // .exec_count(exec_count),
 
       .txd(TX),
       .rxd(RX),

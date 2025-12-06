@@ -19,9 +19,9 @@ module cpu_core #(
     output logic txd,
 
     output logic LED_GRN_N,
-    output logic LED_RED_N,
+    output logic LED_RED_N
 
-    output logic [63:0] exec_count
+    // output logic [63:0] exec_count
 );
   typedef enum logic [4:0] {
     S_IDLE,
@@ -41,6 +41,8 @@ module cpu_core #(
     S_PRE_JUMP_W1,
     S_PRE_JUMP_W2,
 
+    // S_PRE_EXEC,
+
     // running
     S_SLOWDOWN,
     S_EXEC_WAIT,
@@ -48,16 +50,14 @@ module cpu_core #(
 
     // io while running
     S_TX_OUT,
-    // S_RX_IN,
     S_RX_WAIT,
 
     // writeback and read. could likely be optimized.
     S_PTR_WRITEBACK,
-    // S_STEP_WAIT,
     S_PTR_READ_SETUP,
-    // S_PTR_READ_WAIT,
-    S_PTR_READ_LATCH
+    S_PTR_READ_LATCH,
 
+    S_PRINT_RESULT
   } state_t;
   state_t state_id;
   state_t after_wait;
@@ -220,6 +220,53 @@ module cpu_core #(
 
   logic [PROG_ADDR_WIDTH-1:0] temp_iptr;  // just a temp var
 
+  // localparam HEX_DIGITS = 6;
+
+  // logic [(HEX_DIGITS*4)-1:0] inst_counts[8];  // 8 buckets
+  // logic [2:0] inst_idx_map;  // curr inst count being printed
+  // logic [(HEX_DIGITS*4)-1:0] shifter;
+
+  // function automatic logic [2:0] get_inst_index(input logic [7:0] op);
+  //   get_inst_index = (op == 8'h3E) ? 3'd0 :
+  //                    (op == 8'h3C) ? 3'd1 :
+  //                    (op == 8'h2B) ? 3'd2 :
+  //                    (op == 8'h2D) ? 3'd3 :
+  //                    (op == 8'h2E) ? 3'd4 :
+  //                    (op == 8'h2C) ? 3'd5 :
+  //                    (op == 8'h5B) ? 3'd6 :
+  //                    (op == 8'h5D) ? 3'd7 : 3'd0;  // should not happen
+  // endfunction
+
+  // function automatic logic [7:0] get_char_from_idx(input logic [2:0] idx);
+  //   get_char_from_idx = (idx == 3'd0) ? 8'h3E :
+  //                       (idx == 3'd1) ? 8'h3C :
+  //                       (idx == 3'd2) ? 8'h2B :
+  //                       (idx == 3'd3) ? 8'h2D :
+  //                       (idx == 3'd4) ? 8'h2E :
+  //                       (idx == 3'd5) ? 8'h2C :
+  //                       (idx == 3'd6) ? 8'h5B :
+  //                       (idx == 3'd7) ? 8'h5D : 8'h00;  // should not happen
+  // endfunction
+
+  function automatic logic is_valid_inst(input logic [7:0] op);
+    is_valid_inst = (op == 8'h3E || op == 8'h3C || op == 8'h2B || op == 8'h2D ||
+                     op == 8'h2E || op == 8'h2C || op == 8'h5B || op == 8'h5D);
+  endfunction
+
+  // logic [2:0] print_row_idx;
+  // logic [4:0] print_char_ctr;
+  // logic [3:0] print_nibble;
+
+
+
+  // logic [PROG_ADDR_WIDTH-1:0] iptr_plus_1;
+  // logic [PROG_ADDR_WIDTH-1:0] jump_rd_plus_1;
+
+  // always_ff @(posedge clk) begin
+  //   iptr_plus_1    <= iptr + 1;
+  //   jump_rd_plus_1 <= jump_rd + 1;  // jump_rd comes from SPRAM, so register its increment
+  // end
+
   always @(posedge clk or negedge resetn) begin : cpu_fsm
     if (!resetn) begin
       state_id <= S_IDLE;
@@ -243,6 +290,11 @@ module cpu_core #(
           do_blink     <= 1'b0;  // helpful for debugging.
           cpu_priority <= 1'b0;  // set early so vga can use data tape.
           executing    <= 1'b0;
+
+          // for (int i = 0; i < 8; i++) begin
+          //   inst_counts[i] <= '0;
+          // end
+
           slow_ctr     <= '0;
 
           load_ptr     <= '0;
@@ -285,7 +337,7 @@ module cpu_core #(
               dptr         <= '0;
               zero_ptr     <= '0;
               state_id     <= S_ZERO_DATA;
-            end else begin
+            end else if (is_valid_inst(rx_data)) begin
               // prog[lptr++] = rx
               prog_we  <= 1'b1;
               iptr     <= load_ptr;
@@ -339,10 +391,19 @@ module cpu_core #(
             jmp_attach_iptr <= 1'b1;  // iptr now addresses jump table.
             executing       <= 1'b1;
             current_cell    <= '0;
-            exec_count      <= '0;
+            // exec_count      <= '0;
             state_id        <= S_EXEC_WAIT;
           end
         end
+
+        // S_PRE_EXEC: begin
+        //   iptr            <= '0;
+        //   jmp_attach_iptr <= 1'b1;  // iptr now addresses jump table.
+        //   executing       <= 1'b1;
+        //   current_cell    <= '0;
+        //   // exec_count      <= '0;
+        //   state_id        <= S_EXEC_WAIT;
+        // end
 
         S_PRE_STACK_INCR: begin  // could be replaced by use of a separate pointer.
           stack_ptr  <= stack_ptr + 1;
@@ -376,7 +437,12 @@ module cpu_core #(
         S_EXEC_WAIT: begin
           state_id <= slow_req ? S_SLOWDOWN : S_EXECUTE;
 
-          if (!executing) state_id <= S_IDLE;  // finished
+          if (!executing) begin
+            // print_row_idx  <= '0;
+            // print_char_ctr <= '0;
+            // state_id       <= S_PRINT_RESULT;
+            state_id <= S_IDLE;
+          end
         end
 
         S_SLOWDOWN: begin // doesnt get triggered on PTR_READ_LATCH but thats fine, we just want a slowdown on most insts.
@@ -391,9 +457,16 @@ module cpu_core #(
 
         S_EXECUTE: begin  // can be reached either from EXEC_WAIT or PTR_READ_LATCH
 
-          // LED_RED_N  <= 1'b0;  // light red at end.
+          LED_RED_N <= 1'b0;  // light red on execute.
 
-          exec_count <= exec_count + 1;
+          // if (prog_rd != 8'h00) begin  // since we filter at load, we know this is a valid inst.
+          //   inst_idx_map = get_inst_index(prog_rd);  // map op to 0-7
+          //   inst_counts[inst_idx_map] <= inst_counts[inst_idx_map] + 1;
+          // end
+
+          // todo: quit at null byte.
+
+          // exec_count <= exec_count + 1;
           case (prog_rd)
 
             8'h3E, 8'h3C: begin  // > < : inc/dec data pointer
@@ -427,10 +500,11 @@ module cpu_core #(
               state_id <= S_EXEC_WAIT;
             end
 
-            default: state_id <= S_EXEC_WAIT;  // nop
+            default: state_id <= S_EXEC_WAIT;  // nop. todo: change to end.
           endcase
 
           temp_iptr = use_jump_rd ? jump_rd + 1 : iptr + 1;  // blocking!!! temp storage.
+          // temp_iptr = use_jump_rd ? jump_rd_plus_1 : iptr_plus_1;  // blocking!!!
           if (temp_iptr != '0) begin  // if next inst isnt first
             iptr <= temp_iptr;
           end else begin
@@ -476,6 +550,57 @@ module cpu_core #(
           cpu_priority <= 1'b0;  // release data tape
           state_id     <= S_EXECUTE;
         end
+
+        // S_PRINT_RESULT: begin
+        //   if (!tx_busy && !tx_start) begin
+        //     // Format: "[CHAR] [HEX_VALUE]\n"
+
+        //     case (print_char_ctr)
+        //       0: begin
+        //         tx_data  <= get_char_from_idx(print_row_idx);
+        //         tx_start <= 1'b1;
+
+        //         shifter  <= inst_counts[print_row_idx];
+        //       end
+
+        //       1: begin
+        //         tx_data  <= 8'h20;
+        //         tx_start <= 1'b1;
+        //       end
+
+        //       // 3. Print 8 Hex Digits (Indices 2 to 9)
+        //       default: begin
+        //         if (print_char_ctr >= 2 && print_char_ctr <= HEX_DIGITS + 1) begin
+        //           print_nibble = shifter[(4*HEX_DIGITS)-1:4*(HEX_DIGITS-1)];
+        //           shifter <= shifter << 4;  // shift left by 4 for next nibble
+
+        //           tx_data  <= (print_nibble < 10) ? (8'h30 + 8'(print_nibble)) : (8'h37 + 8'(print_nibble));
+        //           tx_start <= 1'b1;
+        //         end
+        //       end
+
+        //       // 4. Print Newline
+        //       HEX_DIGITS + 2: begin
+        //         tx_data  <= 8'h0A;
+        //         tx_start <= 1'b1;
+        //       end  // \n
+        //     endcase
+
+        //     // Increment Character Counter
+        //     if (print_char_ctr == HEX_DIGITS + 2) begin
+        //       print_char_ctr <= '0;  // Reset line char counter
+
+        //       // Check if we have done all 8 instruction types
+        //       if (print_row_idx == 7) begin
+        //         state_id <= S_IDLE;  // Done with everything
+        //       end else begin
+        //         print_row_idx <= print_row_idx + 1;  // Next instruction type
+        //       end
+        //     end else begin
+        //       print_char_ctr <= print_char_ctr + 1;
+        //     end
+        //   end
+        // end
 
         // S_STEP_WAIT: begin  // todo: just merge into exec wait.
         //   // if we just executed . then wait for step_req before next fetch

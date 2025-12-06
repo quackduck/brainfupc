@@ -127,15 +127,6 @@ module receiver #(
 endmodule
 
 
-
-
-
-
-
-
-
-
-
 // // from claude:
 
 // module receiver #(

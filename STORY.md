@@ -110,13 +110,13 @@ The nagging suspicion that feeling limited by such a pricey FPGA running such a 
 
 ## How to make a Brainfuck CPU
 
-Back at Purdue for my third year, <!-- my partner  -->Amber nudges me to present my CPU at [Spill](https://spill.purduehackers.com), a showcase of projects she's helping organize. I'm considering it. When Ray tells me I can get reimbursed for whatever hardware I want, I'm completely convinced.
+Back at Purdue for my third year, Amber, my partner, nudges me to present my CPU at [Spill](https://spill.purduehackers.com), a showcase of projects she's helping organize. I'm considering it. When Ray tells me I can get reimbursed for whatever hardware I want, I'm completely convinced.
 
-I decide I want a return to simplicity. I will free myself from Vivado and free all who want a Brainfuck CPU. I will use a cheap open-source FPGA and use open-source tooling to program it with code I will open-source.
+I want a return to simplicity. I will free myself from Vivado and free all who want a Brainfuck CPU. I will use a cheap open-source FPGA and use open-source tooling to program it with code I will open-source.
 
 Five days after hearing I will be reimbursed, I have a shiny new Icebreaker v1.1a in my hands along with a couple seven-segment displays. This is all I need to get started.
 
-### ~~Introduction~~ Ingredients
+### Ingredients
 
 #### What's an FPGA?
 An FPGA is a piece of programmable silicon. Essentially, you describe circuits in code and the FPGA will pretend to become that circuit, like magic! 
@@ -143,7 +143,7 @@ Using "Turing-complete" as an adjective thus means being able to compute anythin
 - Apple M2
 - Python
 - Lisp
-- Just the types from TypeScript
+- TypeScript's type system
 - Some sort of water contraption
 - And of course...
 
@@ -199,3 +199,123 @@ Finally, here is `Hello World!\n`
 ++++++++++[>+++++++>++++++++++>+++>+<<<<-]>++.>+.+++++++..+++.>++.<<+++++++++++++++.>.+++.------.--------.>+.>.
 ```
 It shouldn't look totally unfamiliar anymore!
+
+### BF CPU
+
+
+#### High level design
+
+Imagine software as using an API provided by the CPU. It becomes clear that someone needs to implement this API in hardware, and that's what it means to make a CPU.
+
+Let's come up with the API that our CPU needs to provide. 
+
+Since we want to implement Brainfuck, we need to support the eight instructions above and the structures they need.
+
+It's clear that we need some way to store the data tape. We'll need a data pointer to keep track of which cell we're on.
+
+Similarly, we need to store the program somehow, and again we'll need an instruction pointer to know which instruction we're executing.
+
+Now we need a way to handle input and output. Since FPGAs don't have screens or keyboards, we'll use a simple streaming interface where the CPU can output one byte at a time and receive one byte at a time through serial. When I was initially developing this CPU, I ignored input and hooked up output to a seven segment display that could only show a single byte.
+
+Looks like we've thought about how to handle incrementing and decrementing the data pointer and current cell, as well as input and output. That's six of the eight instructions:
+
+```sv
+case inst:
+    > : dptr += 1
+    < : dptr -= 1
+    + : data[dptr] += 1
+    - : data[dptr] -= 1
+    . : output data[dptr]
+    , : data[dptr] = input
+```
+
+To implement `[` and `]`, we need a way to jump to the matching bracket based on the value of the current cell.
+
+For a second, let's think about how we'd implement the comments here:
+```sv
+if inst == '[':
+    if data[dptr] == 0:
+        // jump to matching ']'
+if inst == ']':
+    if data[dptr] != 0:
+        // jump to matching '['
+```
+
+We could keep track of bracket depth and increment `iptr` until we find the matching bracket:
+```sv
+if inst == '[':
+    if data[dptr] == 0:
+        depth = 1
+        while depth > 0:
+            iptr += 1
+            if program[iptr] == '[':
+                depth += 1
+            elif program[iptr] == ']':
+                depth -= 1
+        iptr += 1  // inst after matching bracket
+```
+
+Hopefully alarms are ringing in your head. This is *slow*. A single instruction could take on the order of the size of the program to execute!
+
+Here's a simple idea. Before we start running, we can have a hashmap of bracket locations. For each `[`, we store the index of the matching `]`, and vice versa. This way, when we need to jump, we can just look it up in O(1) time:
+```sv
+jump_table = map(int -> int)
+stack = []
+for iptr:
+    if program[iptr] == '[':
+        stack.push(iptr)
+    elif program[iptr] == ']':
+        match = stack.pop()
+        jump_table[match] = iptr
+        jump_table[iptr] = match
+```
+And now:
+```sv
+if inst == '[':
+    if data[dptr] == 0:
+        iptr = jump_table[iptr] + 1
+if inst == ']':
+    if data[dptr] != 0:
+        iptr = jump_table[iptr] + 1
+```
+
+Simple, but we've been thinking in software-y pseudocode. How do we implement this in hardware? We don't have stacks, or hashmaps, and how does memory work?
+
+#### Thinking in hardware
+
+Thankfully, languages like SystemVerilog provide abstractions that allow us to use some of our software thinking. For example, we don't have to implement adders every time we want to increment something; the tooling can do that for us. 
+
+Here's a crash course in clock cycles, logic and memory.
+
+##### Clock
+A computer runs off of electricity, and electricity travels at the speed of light, so why aren't computers basically instantaneous?
+
+The answer is that we need synchronization. Let's say we have a circuit that depends on the output of an adder connected to wires carrying two binary numbers, `a` and `b`. Now, let's say that the physical length of the wires carrying `a` is longer. This means that the signal for `a` will arrive later than the signal for `b`. Our adder is a circuit, and so it will continuously compute `a+b` without caring about whether `a` is "valid" (a concept imposed by humans). For a split second, the adder will compute and output garbage.
+
+This is not inherently a problem. If we were just displaying the output of the adder on a seven segment display, it's okay if it flickers garbage for a split second. But it's possible for some circuit to always need valid input.
+
+Hmm, how do we fix this "garbage" problem?
+
+Turns out it's possible to make something called a flip-flop, which is a circuit that can store a single bit of information. It has a clock input and a data input, and whenever the clock signal goes from low to high (a "rising edge"), it will store the value of its data input into its internal storage (surprisingly, a flip-flop can be made from just regular state-less logic gates!).
+
+Now we see a solution. If we have a global clock signal that goes high and low at some frequency, and we can set that frequency so signals always have time to fully propagate between pulses, we can use flip-flops to store values at each rising edge of the clock. This way, we can ensure that all our circuits have "valid" inputs at the same time: right after the clock rises.
+
+This is the core reason we need clock signals. The faster the clock, the faster we can compute things, but the more likely it is that signals won't have time to propagate and we'll get garbage. The limiting factor is thus the "critical path," the longest path a signal has to travel between two flip-flops.
+
+Commercial CPUs run at gigahertz speeds, while FPGAs are usually in the tens to hundreds of megahertz range. This is because CPUs are designed with custom silicon that minimizes the critical path for common operations, while FPGAs have to be generic enough to implement any circuit, which adds overhead.
+
+These are insanely fast speeds. A clock cycle running at 1 GHz allows only 1 nanosecond for signal propagation. Light travels only about 30 centimeters in that time.
+
+##### Logic
+
+In a circuit, instaneous is the default. A logic gate continuously computes its output based on its inputs. How then could we make something like a counter that increments every clock cycle? We can't just connect the output of an adder back to its input, because the adder would continuously increment and never stop.
+
+Think flip-flops! We can use a flip-flop to store the current count, and on each clock cycle, we can feed the output of an adder (which adds 1 to the current count) into the flip-flop's input. This way, the count only updates on the rising edge of the clock.
+
+SystemVerilog makes this super easy:
+```sv
+logic [7:0] count; // 8-bit counter
+always @(posedge clk) begin
+    count <= count + 1;
+end
+```
