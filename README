@@ -1,0 +1,15 @@
+Brainfuck CPU
+
+12.75 million brainfucks per second
+16384 max program length
+32768 data cells
+2.125 million baud serial program load
+25.50 megahertz clock
+   
+640 x 480 display showing data tape
+
+Ask me why the display's glitching!
+
+Can do anything ur CPU can do.. might just be slow.
+
+Wanna play tic tac toe? A ghost game? Calculate powers of two? See /programs

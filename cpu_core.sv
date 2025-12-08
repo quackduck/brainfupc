@@ -86,8 +86,6 @@ module cpu_core #(
       .txd(txd)
   );
 
-  // logic rx_start;
-  // logic rx_busy;
   logic rx_valid;
   logic [7:0] rx_data;
 
@@ -121,25 +119,45 @@ module cpu_core #(
       .data_out(_prog_rd)
   );
 
-  localparam int SLOWDOWN = 10;  // wait 2^(SLOWDOWN+1) cycles when SLOWDOWN != 0. since each inst takes ~2 cycles, this slows by ~2^SLOWDOWN.
-  logic [SLOWDOWN:0] slow_ctr;
+  // localparam int SLOWDOWN = 10;  // wait 2^(SLOWDOWN+1) cycles when SLOWDOWN != 0. since each inst takes ~2 cycles, this slows by ~2^SLOWDOWN.
+  // logic [SLOWDOWN:0] slow_ctr;
+
+  // localparam DIFF = 12;
+  localparam DIFF = 10;
+  // localparam int DIFF = 6;
+
+  logic [     23:0] slow_ctr;
+  logic [     23:0] slow_lim;  // counts 2^DIFF x slower than slow_ctr.
+  logic [23+DIFF:0] slow_lim_big;
+  assign slow_lim = slow_lim_big[23+DIFF:DIFF];
+  always_ff @(posedge clk or negedge resetn) begin
+    if (!resetn) begin
+      slow_lim_big <= '0;
+    end else begin
+      if (slow_req) begin  // incr while slow_req is held down.
+        slow_lim_big <= slow_lim_big + 1;
+      end else begin
+        slow_lim_big <= '0;
+      end
+    end
+  end
 
   // brainfuck data tape
 
-  logic [      14:0] dptr;  // 15 bits, max addr is 32767.
-  logic [       7:0] data_wr;
-  logic              data_we;
-  logic [       7:0] data_rd;
+  logic [14:0] dptr;  // 15 bits, max addr is 32767.
+  logic [ 7:0] data_wr;
+  logic        data_we;
+  logic [ 7:0] data_rd;
 
 
-  logic [      13:0] _data_addr;
+  logic [13:0] _data_addr;
   // logic [      15:0] _data_wr;
-  logic [       3:0] _data_we;
-  logic [      15:0] _data_rd;
+  logic [ 3:0] _data_we;
+  logic [15:0] _data_rd;
 
-  logic              byte_sel;
+  logic        byte_sel;
 
-  logic              cpu_priority;  // set before doing ops with data tape.
+  logic        cpu_priority;  // set before doing ops with data tape.
 
   assign _data_addr = cpu_priority ? dptr[13:0] : vga_data_addr[13:0];
   assign byte_sel   = cpu_priority ? dptr[14] : vga_data_addr[14];  // dptr[14];
@@ -206,66 +224,24 @@ module cpu_core #(
                       (prog_rd == 8'h5D && current_cell != 8'h00);
   end
 
-  logic do_blink;
-  logic [23:0] blink_ctr;
-  always_ff @(posedge clk) begin
-    if (do_blink) begin
-      blink_ctr <= blink_ctr + 1;
-      LED_GRN_N <= blink_ctr[23];
-    end else begin
-      blink_ctr <= '0;
-      LED_GRN_N <= 1'b1;  // off
-    end
-  end
+  // logic do_blink;
+  // logic [23:0] blink_ctr;
+  // always_ff @(posedge clk) begin
+  //   if (do_blink) begin
+  //     blink_ctr <= blink_ctr + 1;
+  //     LED_GRN_N <= blink_ctr[23];
+  //   end else begin
+  //     blink_ctr <= '0;
+  //     LED_GRN_N <= 1'b1;  // off
+  //   end
+  // end
 
   logic [PROG_ADDR_WIDTH-1:0] temp_iptr;  // just a temp var
-
-  // localparam HEX_DIGITS = 6;
-
-  // logic [(HEX_DIGITS*4)-1:0] inst_counts[8];  // 8 buckets
-  // logic [2:0] inst_idx_map;  // curr inst count being printed
-  // logic [(HEX_DIGITS*4)-1:0] shifter;
-
-  // function automatic logic [2:0] get_inst_index(input logic [7:0] op);
-  //   get_inst_index = (op == 8'h3E) ? 3'd0 :
-  //                    (op == 8'h3C) ? 3'd1 :
-  //                    (op == 8'h2B) ? 3'd2 :
-  //                    (op == 8'h2D) ? 3'd3 :
-  //                    (op == 8'h2E) ? 3'd4 :
-  //                    (op == 8'h2C) ? 3'd5 :
-  //                    (op == 8'h5B) ? 3'd6 :
-  //                    (op == 8'h5D) ? 3'd7 : 3'd0;  // should not happen
-  // endfunction
-
-  // function automatic logic [7:0] get_char_from_idx(input logic [2:0] idx);
-  //   get_char_from_idx = (idx == 3'd0) ? 8'h3E :
-  //                       (idx == 3'd1) ? 8'h3C :
-  //                       (idx == 3'd2) ? 8'h2B :
-  //                       (idx == 3'd3) ? 8'h2D :
-  //                       (idx == 3'd4) ? 8'h2E :
-  //                       (idx == 3'd5) ? 8'h2C :
-  //                       (idx == 3'd6) ? 8'h5B :
-  //                       (idx == 3'd7) ? 8'h5D : 8'h00;  // should not happen
-  // endfunction
 
   function automatic logic is_valid_inst(input logic [7:0] op);
     is_valid_inst = (op == 8'h3E || op == 8'h3C || op == 8'h2B || op == 8'h2D ||
                      op == 8'h2E || op == 8'h2C || op == 8'h5B || op == 8'h5D);
   endfunction
-
-  // logic [2:0] print_row_idx;
-  // logic [4:0] print_char_ctr;
-  // logic [3:0] print_nibble;
-
-
-
-  // logic [PROG_ADDR_WIDTH-1:0] iptr_plus_1;
-  // logic [PROG_ADDR_WIDTH-1:0] jump_rd_plus_1;
-
-  // always_ff @(posedge clk) begin
-  //   iptr_plus_1    <= iptr + 1;
-  //   jump_rd_plus_1 <= jump_rd + 1;  // jump_rd comes from SPRAM, so register its increment
-  // end
 
   always @(posedge clk or negedge resetn) begin : cpu_fsm
     if (!resetn) begin
@@ -287,13 +263,9 @@ module cpu_core #(
 
       case (state_id)
         S_IDLE: begin
-          do_blink     <= 1'b0;  // helpful for debugging.
+          // do_blink     <= 1'b0;  // helpful for debugging.
           cpu_priority <= 1'b0;  // set early so vga can use data tape.
           executing    <= 1'b0;
-
-          // for (int i = 0; i < 8; i++) begin
-          //   inst_counts[i] <= '0;
-          // end
 
           slow_ctr     <= '0;
 
@@ -396,15 +368,6 @@ module cpu_core #(
           end
         end
 
-        // S_PRE_EXEC: begin
-        //   iptr            <= '0;
-        //   jmp_attach_iptr <= 1'b1;  // iptr now addresses jump table.
-        //   executing       <= 1'b1;
-        //   current_cell    <= '0;
-        //   // exec_count      <= '0;
-        //   state_id        <= S_EXEC_WAIT;
-        // end
-
         S_PRE_STACK_INCR: begin  // could be replaced by use of a separate pointer.
           stack_ptr  <= stack_ptr + 1;
 
@@ -438,9 +401,6 @@ module cpu_core #(
           state_id <= slow_req ? S_SLOWDOWN : S_EXECUTE;
 
           if (!executing) begin
-            // print_row_idx  <= '0;
-            // print_char_ctr <= '0;
-            // state_id       <= S_PRINT_RESULT;
             state_id <= S_IDLE;
           end
         end
@@ -448,7 +408,11 @@ module cpu_core #(
         S_SLOWDOWN: begin // doesnt get triggered on PTR_READ_LATCH but thats fine, we just want a slowdown on most insts.
           if (slow_req) begin
             slow_ctr <= slow_ctr + 1;
-            if (slow_ctr == '1) state_id <= S_EXECUTE;
+            // if (slow_ctr == '1) state_id <= S_EXECUTE;
+            if (slow_ctr >= slow_lim) begin
+              state_id <= S_EXECUTE;
+              slow_ctr <= '0;
+            end
           end else begin
             slow_ctr <= '0;
             state_id <= S_EXECUTE;
@@ -456,13 +420,7 @@ module cpu_core #(
         end
 
         S_EXECUTE: begin  // can be reached either from EXEC_WAIT or PTR_READ_LATCH
-
           LED_RED_N <= 1'b0;  // light red on execute.
-
-          // if (prog_rd != 8'h00) begin  // since we filter at load, we know this is a valid inst.
-          //   inst_idx_map = get_inst_index(prog_rd);  // map op to 0-7
-          //   inst_counts[inst_idx_map] <= inst_counts[inst_idx_map] + 1;
-          // end
 
           // todo: quit at null byte.
 
@@ -550,57 +508,6 @@ module cpu_core #(
           cpu_priority <= 1'b0;  // release data tape
           state_id     <= S_EXECUTE;
         end
-
-        // S_PRINT_RESULT: begin
-        //   if (!tx_busy && !tx_start) begin
-        //     // Format: "[CHAR] [HEX_VALUE]\n"
-
-        //     case (print_char_ctr)
-        //       0: begin
-        //         tx_data  <= get_char_from_idx(print_row_idx);
-        //         tx_start <= 1'b1;
-
-        //         shifter  <= inst_counts[print_row_idx];
-        //       end
-
-        //       1: begin
-        //         tx_data  <= 8'h20;
-        //         tx_start <= 1'b1;
-        //       end
-
-        //       // 3. Print 8 Hex Digits (Indices 2 to 9)
-        //       default: begin
-        //         if (print_char_ctr >= 2 && print_char_ctr <= HEX_DIGITS + 1) begin
-        //           print_nibble = shifter[(4*HEX_DIGITS)-1:4*(HEX_DIGITS-1)];
-        //           shifter <= shifter << 4;  // shift left by 4 for next nibble
-
-        //           tx_data  <= (print_nibble < 10) ? (8'h30 + 8'(print_nibble)) : (8'h37 + 8'(print_nibble));
-        //           tx_start <= 1'b1;
-        //         end
-        //       end
-
-        //       // 4. Print Newline
-        //       HEX_DIGITS + 2: begin
-        //         tx_data  <= 8'h0A;
-        //         tx_start <= 1'b1;
-        //       end  // \n
-        //     endcase
-
-        //     // Increment Character Counter
-        //     if (print_char_ctr == HEX_DIGITS + 2) begin
-        //       print_char_ctr <= '0;  // Reset line char counter
-
-        //       // Check if we have done all 8 instruction types
-        //       if (print_row_idx == 7) begin
-        //         state_id <= S_IDLE;  // Done with everything
-        //       end else begin
-        //         print_row_idx <= print_row_idx + 1;  // Next instruction type
-        //       end
-        //     end else begin
-        //       print_char_ctr <= print_char_ctr + 1;
-        //     end
-        //   end
-        // end
 
         // S_STEP_WAIT: begin  // todo: just merge into exec wait.
         //   // if we just executed . then wait for step_req before next fetch
